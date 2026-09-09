@@ -10,6 +10,7 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -120,6 +121,11 @@ fun TicketChatScreen(
     ) { uris -> viewModel.onImagenesSeleccionadas(uris) }
 
     var showInfoSheet by remember { mutableStateOf(false) }
+    var previewRequest by remember { mutableStateOf<ImagePreviewRequest?>(null) }
+
+    previewRequest?.let { request ->
+        ImagePreviewDialog(request = request, onDismiss = { previewRequest = null })
+    }
 
     if (showInfoSheet) {
         ModalBottomSheet(onDismissRequest = { showInfoSheet = false }) {
@@ -254,7 +260,11 @@ fun TicketChatScreen(
                             }
                         }
                         items(uiState.mensajes, key = { it.id }) { mensaje ->
-                            MensajeBubble(mensaje = mensaje, onReply = viewModel::onReplyToMessage)
+                            MensajeBubble(
+                                mensaje = mensaje,
+                                onReply = viewModel::onReplyToMessage,
+                                onImageClick = { urls, index -> previewRequest = ImagePreviewRequest(urls, index) },
+                            )
                         }
                     }
                 }
@@ -287,7 +297,11 @@ fun TicketChatScreen(
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun MensajeBubble(mensaje: MensajeDto, onReply: (MensajeDto) -> Unit) {
+private fun MensajeBubble(
+    mensaje: MensajeDto,
+    onReply: (MensajeDto) -> Unit,
+    onImageClick: (List<String>, Int) -> Unit,
+) {
     if (mensaje.es_sistema) {
         SystemMessageBubble(mensaje)
         return
@@ -351,7 +365,10 @@ private fun MensajeBubble(mensaje: MensajeDto, onReply: (MensajeDto) -> Unit) {
                 }
                 if (mensaje.imagenes.isNotEmpty()) {
                     Spacer(modifier = Modifier.size(4.dp))
-                    ImagenesGrid(imagenes = mensaje.imagenes.map { it.url })
+                    ImagenesGrid(
+                        imagenes = mensaje.imagenes.map { it.url },
+                        onImageClick = { urls, index -> onImageClick(urls, index) },
+                    )
                 }
                 Spacer(modifier = Modifier.size(2.dp))
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
@@ -371,21 +388,23 @@ private fun MensajeBubble(mensaje: MensajeDto, onReply: (MensajeDto) -> Unit) {
 }
 
 @Composable
-private fun ImagenesGrid(imagenes: List<String?>) {
+private fun ImagenesGrid(imagenes: List<String?>, onImageClick: (List<String>, Int) -> Unit) {
     val urls = imagenes.filterNotNull()
     if (urls.isEmpty()) return
 
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        urls.chunked(2).forEach { fila ->
+        urls.chunked(2).forEachIndexed { filaIndex, fila ->
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                fila.forEach { url ->
+                fila.forEachIndexed { itemIndex, url ->
+                    val globalIndex = filaIndex * 2 + itemIndex
                     AsyncImage(
                         model = url,
                         contentDescription = null,
                         contentScale = ContentScale.Crop,
                         modifier = Modifier
                             .size(120.dp)
-                            .clip(RoundedCornerShape(10.dp)),
+                            .clip(RoundedCornerShape(10.dp))
+                            .clickable { onImageClick(urls, globalIndex) },
                     )
                 }
             }
