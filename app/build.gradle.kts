@@ -92,6 +92,4 @@ dependencies {
     implementation(libs.firebase.messaging.ktx)
 
     implementation(libs.coil.compose)
-
-    implementation(libs.pusher.java.client)
 }

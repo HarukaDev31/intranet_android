@@ -26,6 +26,10 @@ object NetworkModule {
         ignoreUnknownKeys = true
         isLenient = true
         coerceInputValues = true
+        // Sin esto, kotlinx.serialization omite del JSON los campos que quedan en su valor por
+        // defecto (ej. LoginRequest.platform = "android") — el backend nunca los recibía y por
+        // eso nunca se registraba el dispositivo en usuario_device.
+        encodeDefaults = true
     }
 
     @Provides

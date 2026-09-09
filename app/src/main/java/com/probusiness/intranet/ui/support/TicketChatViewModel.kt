@@ -7,6 +7,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.probusiness.intranet.data.remote.dto.MensajeDto
 import com.probusiness.intranet.data.remote.dto.SolicitudDto
+import com.probusiness.intranet.data.remote.realtime.ActiveChatTracker
 import com.probusiness.intranet.data.remote.realtime.RealtimeService
 import com.probusiness.intranet.data.repository.SupportRepository
 import com.probusiness.intranet.ui.navigation.Routes
@@ -38,6 +39,7 @@ data class TicketChatUiState(
 class TicketChatViewModel @Inject constructor(
     private val supportRepository: SupportRepository,
     private val realtimeService: RealtimeService,
+    private val activeChatTracker: ActiveChatTracker,
     private val json: Json,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
@@ -49,11 +51,13 @@ class TicketChatViewModel @Inject constructor(
     val uiState: StateFlow<TicketChatUiState> = _uiState
 
     init {
+        activeChatTracker.onChatOpened(solicitudId)
         cargarSolicitudYMensajes()
     }
 
     override fun onCleared() {
         super.onCleared()
+        activeChatTracker.onChatClosed(solicitudId)
         subscribedChatUuid?.let { realtimeService.unsubscribeFromChat(it) }
     }
 

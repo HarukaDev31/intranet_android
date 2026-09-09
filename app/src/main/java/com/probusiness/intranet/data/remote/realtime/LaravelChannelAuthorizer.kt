@@ -2,11 +2,11 @@ package com.probusiness.intranet.data.remote.realtime
 
 import com.probusiness.intranet.BuildConfig
 import com.probusiness.intranet.data.local.SessionManager
-import com.pusher.client.AuthorizationFailureException
-import com.pusher.client.ChannelAuthorizer
 import okhttp3.FormBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
+
+class AuthorizationFailureException(message: String) : Exception(message)
 
 /**
  * Autoriza canales privados de Reverb/Pusher contra el mismo endpoint que usa el frontend web
@@ -14,11 +14,11 @@ import okhttp3.Request
  */
 class LaravelChannelAuthorizer(
     private val sessionManager: SessionManager,
-) : ChannelAuthorizer {
+) {
 
     private val client = OkHttpClient()
 
-    override fun authorize(channelName: String, socketId: String): String {
+    fun authorize(channelName: String, socketId: String): String {
         val token = sessionManager.token()
             ?: throw AuthorizationFailureException("No hay sesión activa para autorizar el canal")
 

@@ -2,6 +2,7 @@ package com.probusiness.intranet.notifications
 
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
+import com.probusiness.intranet.data.remote.realtime.ActiveChatTracker
 import com.probusiness.intranet.data.repository.AuthRepository
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
@@ -15,6 +16,9 @@ class IntranetFirebaseMessagingService : FirebaseMessagingService() {
 
     @Inject
     lateinit var authRepository: AuthRepository
+
+    @Inject
+    lateinit var activeChatTracker: ActiveChatTracker
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -31,6 +35,13 @@ class IntranetFirebaseMessagingService : FirebaseMessagingService() {
         val data = message.data
         val tipo = data["tipo"]
         if (tipo != TIPO_SOPORTE_TI_MENSAJE && tipo != TIPO_SOPORTE_TI_SOLICITUD_CREADA) return
+
+        val solicitudIdInt = data["solicitud_id"]?.toIntOrNull()
+        if (tipo == TIPO_SOPORTE_TI_MENSAJE && solicitudIdInt != null && solicitudIdInt == activeChatTracker.activeSolicitudId) {
+            // El usuario ya está viendo este chat: el WebSocket (RealtimeService) ya lo actualiza
+            // en vivo, mostrar la notificación acá sería redundante.
+            return
+        }
 
         val title = message.notification?.title ?: "Soporte TI"
         val body = message.notification?.body ?: data["body"] ?: "Tienes una notificación nueva"
