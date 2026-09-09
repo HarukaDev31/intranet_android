@@ -21,6 +21,13 @@ android {
 
         // Cambiar aquí para apuntar a otro entorno (ej. producción).
         buildConfigField("String", "BASE_URL", "\"https://intranetback.probusiness.pe/api/\"")
+
+        // WebSocket (Laravel Reverb, protocolo Pusher) para tiempo real — mismos valores que usa
+        // el frontend web (utils/websocket-config.ts): key real, host/puerto de producción, TLS.
+        buildConfigField("String", "REVERB_APP_KEY", "\"e6b8d96d77e9c4a8b60c\"")
+        buildConfigField("String", "REVERB_HOST", "\"intranetback.probusiness.pe\"")
+        buildConfigField("int", "REVERB_PORT", "6001")
+        buildConfigField("boolean", "REVERB_USE_TLS", "true")
     }
 
     buildTypes {
@@ -82,4 +89,6 @@ dependencies {
     implementation(libs.firebase.messaging.ktx)
 
     implementation(libs.coil.compose)
+
+    implementation(libs.pusher.java.client)
 }

@@ -7,6 +7,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.probusiness.intranet.data.remote.dto.MensajeDto
 import com.probusiness.intranet.data.remote.dto.SolicitudDto
+import com.probusiness.intranet.data.remote.realtime.RealtimeService
 import com.probusiness.intranet.data.repository.SupportRepository
 import com.probusiness.intranet.ui.navigation.Routes
 import com.probusiness.intranet.util.UriFileHelper
@@ -15,6 +16,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.Json
 import javax.inject.Inject
 
 data class TicketChatUiState(
@@ -35,16 +37,24 @@ data class TicketChatUiState(
 @HiltViewModel
 class TicketChatViewModel @Inject constructor(
     private val supportRepository: SupportRepository,
+    private val realtimeService: RealtimeService,
+    private val json: Json,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
     private val solicitudId: Int = checkNotNull(savedStateHandle[Routes.TICKET_CHAT_ARG])
+    private var subscribedChatUuid: String? = null
 
     private val _uiState = MutableStateFlow(TicketChatUiState())
     val uiState: StateFlow<TicketChatUiState> = _uiState
 
     init {
         cargarSolicitudYMensajes()
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        subscribedChatUuid?.let { realtimeService.unsubscribeFromChat(it) }
     }
 
     private fun cargarSolicitudYMensajes() {
@@ -56,6 +66,7 @@ class TicketChatViewModel @Inject constructor(
                     val chatUuid = solicitud.chat_uuid
                     if (chatUuid != null) {
                         cargarMensajesIniciales(chatUuid)
+                        suscribirseATiempoReal(chatUuid)
                     } else {
                         _uiState.update { it.copy(isLoadingMensajes = false) }
                     }
@@ -69,6 +80,22 @@ class TicketChatViewModel @Inject constructor(
                         )
                     }
                 }
+        }
+    }
+
+    private fun suscribirseATiempoReal(chatUuid: String) {
+        if (subscribedChatUuid == chatUuid) return
+        subscribedChatUuid = chatUuid
+        realtimeService.subscribeToChat(chatUuid) { mensajeJson ->
+            val nuevo = runCatching { json.decodeFromString(MensajeDto.serializer(), mensajeJson) }.getOrNull()
+                ?: return@subscribeToChat
+            _uiState.update { state ->
+                if (state.mensajes.any { it.id == nuevo.id }) return@update state
+                state.copy(mensajes = state.mensajes + nuevo)
+            }
+            if (!nuevo.leido && !nuevo.es_propio) {
+                marcarComoLeidos(chatUuid, listOf(nuevo))
+            }
         }
     }
 

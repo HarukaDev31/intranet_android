@@ -58,7 +58,6 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.probusiness.intranet.data.remote.dto.SolicitudDto
-import com.probusiness.intranet.ui.theme.AppBackgroundLight
 import com.probusiness.intranet.ui.theme.Orange600
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -89,7 +88,7 @@ fun SupportListScreen(
                         Icon(Icons.Outlined.Logout, contentDescription = "Cerrar sesión")
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = AppBackgroundLight),
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
             )
         },
         floatingActionButton = {
@@ -101,7 +100,7 @@ fun SupportListScreen(
                 text = { Text("Nuevo ticket") },
             )
         },
-        containerColor = AppBackgroundLight,
+        containerColor = MaterialTheme.colorScheme.background,
     ) { padding: PaddingValues ->
         PullToRefreshBox(
             isRefreshing = uiState.isLoading && uiState.solicitudes.isNotEmpty(),

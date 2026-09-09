@@ -75,15 +75,8 @@ import coil.compose.AsyncImage
 import com.probusiness.intranet.data.remote.dto.MensajeDto
 import com.probusiness.intranet.data.remote.dto.SolicitudDto
 import kotlinx.coroutines.launch
-import com.probusiness.intranet.ui.theme.Orange100
-import com.probusiness.intranet.ui.theme.Orange200
 import com.probusiness.intranet.ui.theme.Orange600
-import com.probusiness.intranet.ui.theme.Orange900
 import com.probusiness.intranet.ui.theme.Sky500
-import com.probusiness.intranet.ui.theme.Slate100
-import com.probusiness.intranet.ui.theme.Slate200
-import com.probusiness.intranet.ui.theme.Slate500
-import com.probusiness.intranet.ui.theme.Slate900
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -313,9 +306,21 @@ private fun MensajeBubble(
     } else {
         RoundedCornerShape(topStart = 6.dp, topEnd = 18.dp, bottomEnd = 18.dp, bottomStart = 18.dp)
     }
-    val backgroundColor = if (mensaje.es_propio) Orange100 else Slate100
-    val borderColor = if (mensaje.es_propio) Orange200 else Slate200
-    val textColor = if (mensaje.es_propio) Orange900 else Slate900
+    val backgroundColor = if (mensaje.es_propio) {
+        MaterialTheme.colorScheme.primaryContainer
+    } else {
+        MaterialTheme.colorScheme.surfaceVariant
+    }
+    val borderColor = if (mensaje.es_propio) {
+        MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
+    } else {
+        MaterialTheme.colorScheme.outlineVariant
+    }
+    val textColor = if (mensaje.es_propio) {
+        MaterialTheme.colorScheme.onPrimaryContainer
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
 
     Box(modifier = Modifier.fillMaxWidth(), contentAlignment = alignment) {
         Surface(
@@ -332,7 +337,7 @@ private fun MensajeBubble(
                         text = mensaje.remitente ?: "",
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.SemiBold,
-                        color = Slate500,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Spacer(modifier = Modifier.size(2.dp))
                 }
@@ -354,7 +359,7 @@ private fun MensajeBubble(
                             Text(
                                 text = reply.texto ?: if (reply.tiene_imagen) "Imagen adjunta" else "",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = Slate500,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 maxLines = 1,
                             )
                         }
@@ -375,7 +380,7 @@ private fun MensajeBubble(
                     Text(
                         text = mensaje.marca_tiempo ?: "",
                         style = MaterialTheme.typography.labelSmall,
-                        color = Slate500,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     if (mensaje.es_propio) {
                         Spacer(modifier = Modifier.size(4.dp))
@@ -417,7 +422,7 @@ private fun LecturaIndicator(leido: Boolean) {
     Icon(
         imageVector = if (leido) Icons.Filled.DoneAll else Icons.Filled.Done,
         contentDescription = null,
-        tint = if (leido) Sky500 else Slate500,
+        tint = if (leido) Sky500 else MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.size(14.dp),
     )
 }
@@ -426,7 +431,7 @@ private fun LecturaIndicator(leido: Boolean) {
 private fun SystemMessageBubble(mensaje: MensajeDto) {
     Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
         Surface(
-            color = Slate100,
+            color = MaterialTheme.colorScheme.surfaceVariant,
             shape = RoundedCornerShape(10.dp),
             modifier = Modifier.padding(vertical = 4.dp),
         ) {
@@ -435,11 +440,11 @@ private fun SystemMessageBubble(mensaje: MensajeDto) {
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
             ) {
-                Icon(Icons.Outlined.Schedule, contentDescription = null, tint = Slate500, modifier = Modifier.size(14.dp))
+                Icon(Icons.Outlined.Schedule, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(14.dp))
                 Text(
                     text = mensaje.texto.orEmpty(),
                     style = MaterialTheme.typography.labelSmall,
-                    color = Slate500,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }
@@ -512,7 +517,7 @@ private fun ChatEmptyState() {
 
 @Composable
 private fun ReplyPreviewBar(mensaje: MensajeDto, onCancel: () -> Unit) {
-    Surface(color = Slate100, modifier = Modifier.fillMaxWidth()) {
+    Surface(color = MaterialTheme.colorScheme.surfaceVariant, modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -529,7 +534,7 @@ private fun ReplyPreviewBar(mensaje: MensajeDto, onCancel: () -> Unit) {
                 Text(
                     text = mensaje.texto ?: if (mensaje.imagenes.isNotEmpty()) "Imagen adjunta" else "",
                     style = MaterialTheme.typography.bodySmall,
-                    color = Slate500,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                 )
             }
