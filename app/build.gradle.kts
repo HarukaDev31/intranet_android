@@ -23,10 +23,13 @@ android {
         buildConfigField("String", "BASE_URL", "\"https://intranetback.probusiness.pe/api/\"")
 
         // WebSocket (Laravel Reverb, protocolo Pusher) para tiempo real — mismos valores que usa
-        // el frontend web (utils/websocket-config.ts): key real, host/puerto de producción, TLS.
+        // el frontend web (utils/websocket-config.ts). El puerto público es 443: nginx expone
+        // wss:// en el mismo 443 que la API y redirige internamente /app/ al contenedor Reverb
+        // en 127.0.0.1:6001 (ver docker/nginx/host-reverse-proxy.probusiness.example.conf) — el
+        // cliente externo (app o navegador) SIEMPRE debe conectar por 443, nunca 6001 directo.
         buildConfigField("String", "REVERB_APP_KEY", "\"e6b8d96d77e9c4a8b60c\"")
         buildConfigField("String", "REVERB_HOST", "\"intranetback.probusiness.pe\"")
-        buildConfigField("int", "REVERB_PORT", "6001")
+        buildConfigField("int", "REVERB_PORT", "443")
         buildConfigField("boolean", "REVERB_USE_TLS", "true")
     }
 

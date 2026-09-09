@@ -7,10 +7,15 @@ import com.pusher.client.PusherOptions
 import com.pusher.client.channel.ChannelEventListener
 import com.pusher.client.channel.PrivateChannelEventListener
 import com.pusher.client.channel.PusherEvent
+import com.pusher.client.connection.ConnectionEventListener
+import com.pusher.client.connection.ConnectionStateChange
 import dagger.hilt.android.qualifiers.ApplicationContext
 import android.content.Context
+import android.util.Log
 import javax.inject.Inject
 import javax.inject.Singleton
+
+private const val TAG = "RealtimeService"
 
 /**
  * Cliente WebSocket (Laravel Reverb, protocolo Pusher) para actualizaciones en tiempo real —
@@ -34,8 +39,20 @@ class RealtimeService @Inject constructor(
             .setUseTLS(BuildConfig.REVERB_USE_TLS)
             .setChannelAuthorizer(LaravelChannelAuthorizer(sessionManager))
 
+        Log.i(TAG, "Conectando a wss://${BuildConfig.REVERB_HOST}:${BuildConfig.REVERB_PORT} (key=${BuildConfig.REVERB_APP_KEY.take(6)}…, tls=${BuildConfig.REVERB_USE_TLS})")
+
         val instance = Pusher(BuildConfig.REVERB_APP_KEY, options)
-        instance.connect()
+        instance.connect(
+            object : ConnectionEventListener {
+                override fun onConnectionStateChange(change: ConnectionStateChange) {
+                    Log.i(TAG, "Conexión WS: ${change.previousState} -> ${change.currentState}")
+                }
+
+                override fun onError(message: String, code: String?, e: Exception?) {
+                    Log.w(TAG, "Error de conexión WS: $message (code=$code)", e)
+                }
+            },
+        )
         pusher = instance
         return instance
     }
@@ -46,16 +63,20 @@ class RealtimeService @Inject constructor(
      */
     fun subscribeToChat(chatUuid: String, onMensajeCreadoJson: (String) -> Unit) {
         val channelName = "private-soporte-ti.chat.$chatUuid"
+        Log.i(TAG, "Suscribiendo a $channelName")
         client().subscribePrivate(
             channelName,
             object : PrivateChannelEventListener {
                 override fun onAuthenticationFailure(message: String, e: Exception) {
-                    android.util.Log.w("RealtimeService", "Auth de canal falló ($channelName): $message", e)
+                    Log.w(TAG, "Auth de canal falló ($channelName): $message", e)
                 }
 
-                override fun onSubscriptionSucceeded(channelName: String) {}
+                override fun onSubscriptionSucceeded(channelName: String) {
+                    Log.i(TAG, "Suscripción OK a $channelName")
+                }
 
                 override fun onEvent(event: PusherEvent) {
+                    Log.i(TAG, "Evento recibido en $channelName: ${event.eventName} — ${event.data}")
                     if (event.eventName != "SoporteTiMensajeCreado") return
                     val mensajeJson = runCatching {
                         org.json.JSONObject(event.data).optJSONObject("mensaje")?.toString()
