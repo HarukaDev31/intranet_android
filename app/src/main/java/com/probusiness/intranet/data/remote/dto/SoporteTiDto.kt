@@ -49,7 +49,8 @@ data class SolicitudDetailResponse(
 data class ImagenDto(
     val url: String? = null,
     val nombre: String? = null,
-    val tamano: Long? = null,
+    // El backend lo devuelve formateado como texto (ej. "108 KB", "1.2 MB"), no como número de bytes.
+    val tamano: String? = null,
 )
 
 @Serializable

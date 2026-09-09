@@ -20,7 +20,7 @@ android {
         versionName = "1.0.0"
 
         // Cambiar aquí para apuntar a otro entorno (ej. producción).
-        buildConfigField("String", "BASE_URL", "\"https://qa.intranetback.probusiness.pe/api/\"")
+        buildConfigField("String", "BASE_URL", "\"https://intranetback.probusiness.pe/api/\"")
     }
 
     buildTypes {

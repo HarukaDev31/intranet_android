@@ -5,23 +5,29 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.AttachFile
+import androidx.compose.material.icons.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.AttachFile
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -29,10 +35,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.probusiness.intranet.ui.theme.Orange600
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -55,10 +64,10 @@ fun NewTicketScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Nuevo ticket") },
+                title = { Text("Nuevo ticket", fontWeight = FontWeight.SemiBold) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Filled.ArrowBack, contentDescription = "Volver")
+                        Icon(Icons.Outlined.ArrowBack, contentDescription = "Volver")
                     }
                 },
             )
@@ -70,22 +79,47 @@ fun NewTicketScreen(
                 .padding(padding)
                 .verticalScroll(rememberScrollState())
                 .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            Row2(uiState.tipoSolicitud, onTipoA = { viewModel.onTipoChange("A") }, onTipoB = { viewModel.onTipoChange("B") })
+            SectionLabel("Tipo de solicitud")
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(
+                    selected = uiState.tipoSolicitud == "A",
+                    onClick = { viewModel.onTipoChange("A") },
+                    label = { Text("Tipo A") },
+                    colors = brandChipColors(),
+                )
+                FilterChip(
+                    selected = uiState.tipoSolicitud == "B",
+                    onClick = { viewModel.onTipoChange("B") },
+                    label = { Text("Tipo B") },
+                    colors = brandChipColors(),
+                )
+            }
 
             if (uiState.tipoSolicitud == "B") {
-                Row2Sub(
-                    subtipo = uiState.subtipoB ?: "B1",
-                    onB1 = { viewModel.onSubtipoChange("B1") },
-                    onB2 = { viewModel.onSubtipoChange("B2") },
-                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(
+                        selected = (uiState.subtipoB ?: "B1") == "B1",
+                        onClick = { viewModel.onSubtipoChange("B1") },
+                        label = { Text("B1") },
+                        colors = brandChipColors(),
+                    )
+                    FilterChip(
+                        selected = uiState.subtipoB == "B2",
+                        onClick = { viewModel.onSubtipoChange("B2") },
+                        label = { Text("B2") },
+                        colors = brandChipColors(),
+                    )
+                }
             }
 
             OutlinedTextField(
                 value = uiState.titulo,
                 onValueChange = viewModel::onTituloChange,
                 label = { Text("Título") },
+                colors = brandFieldColors(),
+                shape = RoundedCornerShape(12.dp),
                 modifier = Modifier.fillMaxWidth(),
             )
 
@@ -93,6 +127,8 @@ fun NewTicketScreen(
                 value = uiState.area,
                 onValueChange = viewModel::onAreaChange,
                 label = { Text("Área") },
+                colors = brandFieldColors(),
+                shape = RoundedCornerShape(12.dp),
                 modifier = Modifier.fillMaxWidth(),
             )
 
@@ -100,6 +136,8 @@ fun NewTicketScreen(
                 value = uiState.seccionRuta,
                 onValueChange = viewModel::onSeccionRutaChange,
                 label = { Text("Sección / ruta en la intranet (opcional)") },
+                colors = brandFieldColors(),
+                shape = RoundedCornerShape(12.dp),
                 modifier = Modifier.fillMaxWidth(),
             )
 
@@ -108,14 +146,17 @@ fun NewTicketScreen(
                 onValueChange = viewModel::onDescripcionChange,
                 label = { Text("Descripción") },
                 minLines = 4,
+                colors = brandFieldColors(),
+                shape = RoundedCornerShape(12.dp),
                 modifier = Modifier.fillMaxWidth(),
             )
 
             OutlinedButton(
                 onClick = { pickImages.launch("image/*") },
+                shape = RoundedCornerShape(12.dp),
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Icon(Icons.Filled.AttachFile, contentDescription = null)
+                Icon(Icons.Outlined.AttachFile, contentDescription = null)
                 Text(" Adjuntar imágenes (${uiState.imagenes.size})")
             }
 
@@ -126,29 +167,45 @@ fun NewTicketScreen(
             Button(
                 onClick = { viewModel.crear(context) },
                 enabled = !uiState.isSaving,
-                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Orange600, contentColor = Color.White),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(50.dp),
             ) {
                 if (uiState.isSaving) {
-                    CircularProgressIndicator(modifier = Modifier.padding(end = 8.dp))
+                    CircularProgressIndicator(
+                        modifier = Modifier
+                            .padding(end = 8.dp)
+                            .height(18.dp),
+                        color = Color.White,
+                        strokeWidth = 2.dp,
+                    )
                 }
-                Text("Crear ticket")
+                Text("Crear ticket", fontWeight = FontWeight.SemiBold)
             }
         }
     }
 }
 
 @Composable
-private fun Row2(tipo: String, onTipoA: () -> Unit, onTipoB: () -> Unit) {
-    androidx.compose.foundation.layout.Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        FilterChip(selected = tipo == "A", onClick = onTipoA, label = { Text("Tipo A") })
-        FilterChip(selected = tipo == "B", onClick = onTipoB, label = { Text("Tipo B") })
-    }
+private fun SectionLabel(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
 }
 
 @Composable
-private fun Row2Sub(subtipo: String, onB1: () -> Unit, onB2: () -> Unit) {
-    androidx.compose.foundation.layout.Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        FilterChip(selected = subtipo == "B1", onClick = onB1, label = { Text("B1") })
-        FilterChip(selected = subtipo == "B2", onClick = onB2, label = { Text("B2") })
-    }
-}
+private fun brandChipColors() = FilterChipDefaults.filterChipColors(
+    selectedContainerColor = Orange600,
+    selectedLabelColor = Color.White,
+)
+
+@Composable
+private fun brandFieldColors() = OutlinedTextFieldDefaults.colors(
+    focusedBorderColor = Orange600,
+    focusedLabelColor = Orange600,
+    cursorColor = Orange600,
+)

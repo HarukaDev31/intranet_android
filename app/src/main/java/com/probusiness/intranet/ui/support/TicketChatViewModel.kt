@@ -19,6 +19,7 @@ import javax.inject.Inject
 
 data class TicketChatUiState(
     val isLoadingHeader: Boolean = true,
+    val isLoadingMensajes: Boolean = true,
     val solicitud: SolicitudDto? = null,
     val mensajes: List<MensajeDto> = emptyList(),
     val hasMore: Boolean = false,
@@ -27,6 +28,8 @@ data class TicketChatUiState(
     val texto: String = "",
     val imagenes: List<Uri> = emptyList(),
     val error: String? = null,
+    val mensajesError: String? = null,
+    val replyTarget: MensajeDto? = null,
 )
 
 @HiltViewModel
@@ -46,28 +49,56 @@ class TicketChatViewModel @Inject constructor(
 
     private fun cargarSolicitudYMensajes() {
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoadingHeader = true, error = null) }
+            _uiState.update { it.copy(isLoadingHeader = true, isLoadingMensajes = true, error = null, mensajesError = null) }
             supportRepository.obtenerSolicitud(solicitudId)
                 .onSuccess { solicitud ->
                     _uiState.update { it.copy(isLoadingHeader = false, solicitud = solicitud) }
-                    solicitud.chat_uuid?.let { cargarMensajesIniciales(it) }
+                    val chatUuid = solicitud.chat_uuid
+                    if (chatUuid != null) {
+                        cargarMensajesIniciales(chatUuid)
+                    } else {
+                        _uiState.update { it.copy(isLoadingMensajes = false) }
+                    }
                 }
                 .onFailure { throwable ->
                     _uiState.update {
-                        it.copy(isLoadingHeader = false, error = throwable.message ?: "No se pudo cargar el ticket")
+                        it.copy(
+                            isLoadingHeader = false,
+                            isLoadingMensajes = false,
+                            error = throwable.message ?: "No se pudo cargar el ticket",
+                        )
                     }
                 }
         }
     }
 
+    fun reintentarCargarMensajes() {
+        val chatUuid = _uiState.value.solicitud?.chat_uuid ?: return
+        _uiState.update { it.copy(isLoadingMensajes = true, mensajesError = null) }
+        cargarMensajesIniciales(chatUuid)
+    }
+
     private fun cargarMensajesIniciales(chatUuid: String) {
         viewModelScope.launch {
-            supportRepository.listarMensajes(chatUuid).onSuccess { response ->
-                _uiState.update {
-                    it.copy(mensajes = response.data, hasMore = response.pagination?.has_more ?: false)
+            supportRepository.listarMensajes(chatUuid)
+                .onSuccess { response ->
+                    _uiState.update {
+                        it.copy(
+                            mensajes = response.data,
+                            hasMore = response.pagination?.has_more ?: false,
+                            isLoadingMensajes = false,
+                        )
+                    }
+                    marcarComoLeidos(chatUuid, response.data)
                 }
-                marcarComoLeidos(chatUuid, response.data)
-            }
+                .onFailure { throwable ->
+                    _uiState.update {
+                        it.copy(
+                            isLoadingMensajes = false,
+                            mensajesError = throwable.message ?: "No se pudieron cargar los mensajes",
+                        )
+                    }
+                }
         }
     }
 
@@ -105,6 +136,8 @@ class TicketChatViewModel @Inject constructor(
 
     fun onTextoChange(value: String) = _uiState.update { it.copy(texto = value) }
     fun onImagenesSeleccionadas(uris: List<Uri>) = _uiState.update { it.copy(imagenes = uris) }
+    fun onReplyToMessage(mensaje: MensajeDto) = _uiState.update { it.copy(replyTarget = mensaje) }
+    fun onCancelReply() = _uiState.update { it.copy(replyTarget = null) }
 
     fun enviar(context: Context) {
         val state = _uiState.value
@@ -118,7 +151,7 @@ class TicketChatViewModel @Inject constructor(
             supportRepository.enviarMensaje(
                 solicitudId = solicitudId,
                 texto = texto.ifBlank { null },
-                replyToId = null,
+                replyToId = state.replyTarget?.id,
                 imagenes = archivos,
             ).onSuccess { mensaje ->
                 _uiState.update {
@@ -126,6 +159,7 @@ class TicketChatViewModel @Inject constructor(
                         isSending = false,
                         texto = "",
                         imagenes = emptyList(),
+                        replyTarget = null,
                         mensajes = it.mensajes + mensaje,
                     )
                 }

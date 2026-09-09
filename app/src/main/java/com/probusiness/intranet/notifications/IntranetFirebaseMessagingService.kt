@@ -29,10 +29,11 @@ class IntranetFirebaseMessagingService : FirebaseMessagingService() {
         super.onMessageReceived(message)
 
         val data = message.data
-        if (data["tipo"] != TIPO_SOPORTE_TI_MENSAJE) return
+        val tipo = data["tipo"]
+        if (tipo != TIPO_SOPORTE_TI_MENSAJE && tipo != TIPO_SOPORTE_TI_SOLICITUD_CREADA) return
 
         val title = message.notification?.title ?: "Soporte TI"
-        val body = message.notification?.body ?: data["body"] ?: "Tienes un nuevo mensaje"
+        val body = message.notification?.body ?: data["body"] ?: "Tienes una notificación nueva"
         val solicitudId = data["solicitud_id"]
 
         NotificationHelper.showSoporteTiMensaje(applicationContext, title, body, solicitudId)
@@ -41,5 +42,6 @@ class IntranetFirebaseMessagingService : FirebaseMessagingService() {
     companion object {
         const val EXTRA_SOLICITUD_ID = "extra_solicitud_id"
         private const val TIPO_SOPORTE_TI_MENSAJE = "soporte_ti_mensaje"
+        private const val TIPO_SOPORTE_TI_SOLICITUD_CREADA = "soporte_ti_solicitud_creada"
     }
 }

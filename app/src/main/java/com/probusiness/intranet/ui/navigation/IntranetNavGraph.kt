@@ -1,5 +1,10 @@
 package com.probusiness.intranet.ui.navigation
 
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -42,7 +47,14 @@ fun IntranetNavGraph(pendingSolicitudId: Int?) {
 
     val startDestination = if (isLoggedIn) Routes.SUPPORT_LIST else Routes.LOGIN
 
-    NavHost(navController = navController, startDestination = startDestination) {
+    NavHost(
+        navController = navController,
+        startDestination = startDestination,
+        enterTransition = { slideInHorizontally(tween(280)) { it / 4 } + fadeIn(tween(280)) },
+        exitTransition = { fadeOut(tween(200)) },
+        popEnterTransition = { fadeIn(tween(220)) },
+        popExitTransition = { slideOutHorizontally(tween(280)) { it / 4 } + fadeOut(tween(280)) },
+    ) {
         composable(Routes.LOGIN) {
             LoginScreen(onLoginSuccess = {
                 navController.navigate(Routes.SUPPORT_LIST) {
