@@ -10,6 +10,28 @@ data class EstadoDto(
 )
 
 @Serializable
+data class EstadoOpcionDto(
+    val id: Int,
+    val codigo: String,
+    val nombre: String,
+)
+
+@Serializable
+data class GestionDto(
+    val es_creador: Boolean = false,
+    val es_staff: Boolean = false,
+    val puede_estado: Boolean = false,
+    val puede_complejidad: Boolean = false,
+    val puede_complejidad_pm: Boolean = false,
+    val puede_complejidad_analista: Boolean = false,
+    val estados: List<EstadoOpcionDto> = emptyList(),
+    val estado_valor: String? = null,
+    val complejidad_valor: String? = null,
+    val complejidad_pm_valor: String? = null,
+    val complejidad_analista_valor: String? = null,
+)
+
+@Serializable
 data class SolicitudDto(
     val id: Int,
     val chat_uuid: String? = null,
@@ -31,6 +53,17 @@ data class SolicitudDto(
     val ultima_actualizacion: String? = null,
     val seccion_ruta: String? = null,
     val descripcion: String? = null,
+    val gestion: GestionDto? = null,
+)
+
+@Serializable
+data class ActualizarEstadoRequest(
+    val estado_codigo: String,
+)
+
+@Serializable
+data class ActualizarComplejidadRequest(
+    val criticidad: String,
 )
 
 @Serializable

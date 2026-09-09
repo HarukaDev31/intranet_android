@@ -29,6 +29,9 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -44,7 +47,10 @@ import androidx.compose.material.icons.outlined.Menu
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -124,7 +130,13 @@ fun TicketChatScreen(
 
     if (showInfoSheet) {
         ModalBottomSheet(onDismissRequest = { showInfoSheet = false }) {
-            TicketInfoSheetContent(uiState.solicitud)
+            TicketInfoSheetContent(
+                solicitud = uiState.solicitud,
+                isUpdating = uiState.isUpdatingGestion,
+                error = uiState.gestionError,
+                onCambiarEstado = viewModel::cambiarEstado,
+                onCambiarComplejidad = viewModel::cambiarComplejidad,
+            )
         }
     }
 
@@ -551,17 +563,28 @@ private fun ReplyPreviewBar(mensaje: MensajeDto, onCancel: () -> Unit) {
     }
 }
 
+private val COMPLEJIDAD_OPCIONES = listOf("Baja", "Media", "Alta", "Máxima")
+
 @Composable
-private fun TicketInfoSheetContent(solicitud: SolicitudDto?) {
+private fun TicketInfoSheetContent(
+    solicitud: SolicitudDto?,
+    isUpdating: Boolean,
+    error: String?,
+    onCambiarEstado: (String) -> Unit,
+    onCambiarComplejidad: (String) -> Unit,
+) {
     if (solicitud == null) return
+    val gestion = solicitud.gestion
 
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .verticalScroll(rememberScrollState())
             .padding(horizontal = 20.dp)
             .padding(bottom = 32.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
+        // --- Encabezado ---
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(
                 text = solicitud.codigo ?: "Ticket #${solicitud.id}",
@@ -572,6 +595,9 @@ private fun TicketInfoSheetContent(solicitud: SolicitudDto?) {
                 badge = estadoBadgeStyle(solicitud.estado_codigo),
                 text = solicitud.estado?.nombre ?: solicitud.estado_codigo.orEmpty(),
             )
+            if (isUpdating) {
+                CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
+            }
         }
 
         Text(
@@ -582,6 +608,66 @@ private fun TicketInfoSheetContent(solicitud: SolicitudDto?) {
         if (!solicitud.descripcion.isNullOrBlank()) {
             InfoRow(label = "Descripción", value = solicitud.descripcion)
         }
+
+        if (error != null) {
+            Text(text = error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+        }
+
+        // --- Gestión (solo si el backend habilita la acción para este usuario) ---
+        val puedeComplejidad = gestion != null &&
+            (gestion.puede_complejidad || gestion.puede_complejidad_pm || gestion.puede_complejidad_analista)
+
+        if (gestion != null && (gestion.puede_estado || puedeComplejidad)) {
+            HorizontalDivider()
+            Text(
+                text = "Gestión",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.primary,
+            )
+
+            if (gestion.puede_estado && gestion.estados.isNotEmpty()) {
+                SectionLabel("Estado")
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                ) {
+                    gestion.estados.forEach { opcion ->
+                        FilterChip(
+                            selected = opcion.codigo == (gestion.estado_valor ?: solicitud.estado_codigo),
+                            onClick = { if (!isUpdating) onCambiarEstado(opcion.codigo) },
+                            label = { Text(opcion.nombre) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = Orange600,
+                                selectedLabelColor = Color.White,
+                            ),
+                        )
+                    }
+                }
+            }
+
+            if (puedeComplejidad) {
+                val actual = gestion.complejidad_pm_valor ?: gestion.complejidad_analista_valor ?: gestion.complejidad_valor
+                SectionLabel("Complejidad")
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    COMPLEJIDAD_OPCIONES.forEach { opcion ->
+                        FilterChip(
+                            selected = opcion == actual,
+                            onClick = { if (!isUpdating) onCambiarComplejidad(opcion) },
+                            label = { Text(opcion) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = Orange600,
+                                selectedLabelColor = Color.White,
+                            ),
+                        )
+                    }
+                }
+            }
+            HorizontalDivider()
+        }
+
         if (!solicitud.area.isNullOrBlank()) {
             InfoRow(label = "Área", value = solicitud.area)
         }
@@ -604,6 +690,15 @@ private fun TicketInfoSheetContent(solicitud: SolicitudDto?) {
             InfoRow(label = "Sección / ruta", value = solicitud.seccion_ruta)
         }
     }
+}
+
+@Composable
+private fun SectionLabel(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
 }
 
 @Composable

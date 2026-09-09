@@ -1,5 +1,7 @@
 package com.probusiness.intranet.data.remote
 
+import com.probusiness.intranet.data.remote.dto.ActualizarComplejidadRequest
+import com.probusiness.intranet.data.remote.dto.ActualizarEstadoRequest
 import com.probusiness.intranet.data.remote.dto.ApiMessageResponse
 import com.probusiness.intranet.data.remote.dto.DeviceTokenRequest
 import com.probusiness.intranet.data.remote.dto.LoginRequest
@@ -18,6 +20,7 @@ import retrofit2.http.Body
 import retrofit2.http.DELETE
 import retrofit2.http.GET
 import retrofit2.http.Multipart
+import retrofit2.http.PATCH
 import retrofit2.http.POST
 import retrofit2.http.Part
 import retrofit2.http.Path
@@ -48,6 +51,12 @@ interface ApiService {
 
     @GET("soporte-ti/solicitudes/{id}")
     suspend fun obtenerSolicitud(@Path("id") id: Int): SolicitudDetailResponse
+
+    @PATCH("soporte-ti/solicitudes/{id}/estado")
+    suspend fun actualizarEstado(@Path("id") id: Int, @Body request: ActualizarEstadoRequest): SolicitudDetailResponse
+
+    @PATCH("soporte-ti/solicitudes/{id}/complejidad")
+    suspend fun actualizarComplejidad(@Path("id") id: Int, @Body request: ActualizarComplejidadRequest): SolicitudDetailResponse
 
     @Multipart
     @POST("soporte-ti/solicitudes")

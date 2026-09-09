@@ -33,6 +33,8 @@ data class TicketChatUiState(
     val error: String? = null,
     val mensajesError: String? = null,
     val replyTarget: MensajeDto? = null,
+    val isUpdatingGestion: Boolean = false,
+    val gestionError: String? = null,
 )
 
 @HiltViewModel
@@ -162,6 +164,36 @@ class TicketChatViewModel @Inject constructor(
         if (idsNoLeidos.isEmpty()) return
         viewModelScope.launch {
             supportRepository.marcarLeidos(chatUuid, idsNoLeidos)
+        }
+    }
+
+    fun cambiarEstado(estadoCodigo: String) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isUpdatingGestion = true, gestionError = null) }
+            supportRepository.actualizarEstado(solicitudId, estadoCodigo)
+                .onSuccess { solicitud ->
+                    _uiState.update { it.copy(isUpdatingGestion = false, solicitud = solicitud) }
+                }
+                .onFailure { throwable ->
+                    _uiState.update {
+                        it.copy(isUpdatingGestion = false, gestionError = throwable.message ?: "No se pudo cambiar el estado")
+                    }
+                }
+        }
+    }
+
+    fun cambiarComplejidad(criticidad: String) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isUpdatingGestion = true, gestionError = null) }
+            supportRepository.actualizarComplejidad(solicitudId, criticidad)
+                .onSuccess { solicitud ->
+                    _uiState.update { it.copy(isUpdatingGestion = false, solicitud = solicitud) }
+                }
+                .onFailure { throwable ->
+                    _uiState.update {
+                        it.copy(isUpdatingGestion = false, gestionError = throwable.message ?: "No se pudo cambiar la complejidad")
+                    }
+                }
         }
     }
 

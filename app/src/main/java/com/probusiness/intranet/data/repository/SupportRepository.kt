@@ -1,6 +1,8 @@
 package com.probusiness.intranet.data.repository
 
 import com.probusiness.intranet.data.remote.ApiService
+import com.probusiness.intranet.data.remote.dto.ActualizarComplejidadRequest
+import com.probusiness.intranet.data.remote.dto.ActualizarEstadoRequest
 import com.probusiness.intranet.data.remote.dto.MarcarLeidosRequest
 import com.probusiness.intranet.data.remote.dto.MensajeDto
 import com.probusiness.intranet.data.remote.dto.MensajesResponse
@@ -46,6 +48,16 @@ class SupportRepository @Inject constructor(
             imagenes = imagenes.mapIndexed { index, file -> file.toMultipart("imagenes[$index]") },
         )
         response.data ?: error("No se pudo crear la solicitud")
+    }
+
+    suspend fun actualizarEstado(id: Int, estadoCodigo: String): Result<SolicitudDto> = runCatching {
+        apiService.actualizarEstado(id, ActualizarEstadoRequest(estadoCodigo)).data
+            ?: error("No se pudo actualizar el estado")
+    }
+
+    suspend fun actualizarComplejidad(id: Int, criticidad: String): Result<SolicitudDto> = runCatching {
+        apiService.actualizarComplejidad(id, ActualizarComplejidadRequest(criticidad)).data
+            ?: error("No se pudo actualizar la complejidad")
     }
 
     suspend fun listarMensajes(chatUuid: String, beforeId: Int? = null): Result<MensajesResponse> = runCatching {
