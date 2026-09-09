@@ -1,0 +1,30 @@
+{
+  "_comentario": "Placeholder. Descarga el google-services.json REAL desde Firebase Console (Configuración del proyecto > Tus apps > Android, package com.probusiness.intranet) y guárdalo como app/google-services.json (sin '.example'). Ese archivo NO debe commitearse (ver .gitignore).",
+  "project_info": {
+    "project_number": "000000000000",
+    "project_id": "REEMPLAZAR-CON-TU-PROJECT-ID",
+    "storage_bucket": "REEMPLAZAR.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:000000000000:android:0000000000000000000000",
+        "android_client_info": {
+          "package_name": "com.probusiness.intranet"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "REEMPLAZAR"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
