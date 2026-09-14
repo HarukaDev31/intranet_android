@@ -100,35 +100,37 @@ class TicketChatViewModel @Inject constructor(
             chatUuid,
             onMensajeCreadoJson = { mensajeJson ->
                 val nuevo = runCatching { json.decodeFromString(MensajeDto.serializer(), mensajeJson) }.getOrNull()
-                    ?: return@onMensajeCreadoJson
-                _uiState.update { state ->
-                    if (state.mensajes.any { it.id == nuevo.id }) return@update state
-                    val sinOptimista = state.mensajes.filterNot { local ->
-                        local.id < 0 &&
-                            local.es_propio &&
-                            nuevo.es_propio &&
-                            (local.texto ?: "") == (nuevo.texto ?: "")
+                if (nuevo != null) {
+                    _uiState.update { state ->
+                        if (state.mensajes.any { it.id == nuevo.id }) return@update state
+                        val sinOptimista = state.mensajes.filterNot { local ->
+                            local.id < 0 &&
+                                local.es_propio &&
+                                nuevo.es_propio &&
+                                (local.texto ?: "") == (nuevo.texto ?: "")
+                        }
+                        state.copy(mensajes = sinOptimista + nuevo.withEstado(if (nuevo.leido) "leido" else "entregado"))
                     }
-                    state.copy(mensajes = sinOptimista + nuevo.withEstado(if (nuevo.leido) "leido" else "entregado"))
-                }
-                if (!nuevo.leido && !nuevo.es_propio) {
-                    marcarComoLeidos(chatUuid, listOf(nuevo))
+                    if (!nuevo.leido && !nuevo.es_propio) {
+                        marcarComoLeidos(chatUuid, listOf(nuevo))
+                    }
                 }
             },
             onMensajeActualizadoJson = { mensajeJson ->
                 val actualizado = runCatching { json.decodeFromString(MensajeDto.serializer(), mensajeJson) }.getOrNull()
-                    ?: return@onMensajeActualizadoJson
-                _uiState.update { state ->
-                    if (state.mensajes.none { it.id == actualizado.id }) return@update state
-                    state.copy(
-                        mensajes = state.mensajes.map { existing ->
-                            if (existing.id != actualizado.id) existing
-                            else actualizado.copy(
-                                estado_envio = existing.estado_envio,
-                                client_id = existing.client_id,
-                            )
-                        },
-                    )
+                if (actualizado != null) {
+                    _uiState.update { state ->
+                        if (state.mensajes.none { it.id == actualizado.id }) return@update state
+                        state.copy(
+                            mensajes = state.mensajes.map { existing ->
+                                if (existing.id != actualizado.id) existing
+                                else actualizado.copy(
+                                    estado_envio = existing.estado_envio,
+                                    client_id = existing.client_id,
+                                )
+                            },
+                        )
+                    }
                 }
             },
         )
