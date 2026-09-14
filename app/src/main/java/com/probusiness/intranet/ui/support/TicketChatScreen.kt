@@ -41,6 +41,7 @@ import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.AttachFile
+import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
@@ -341,9 +342,10 @@ fun TicketChatScreen(
                             }
                         }
                         items(uiState.mensajes, key = { "${it.client_id ?: it.id}" }) { mensaje ->
+                            val gestion = uiState.solicitud?.gestion
                             MensajeBubble(
                                 mensaje = mensaje,
-                                puedeMarcarRevisado = uiState.solicitud?.gestion?.puede_marcar_revisado == true,
+                                puedeMarcarRevisado = gestion?.puede_marcar_revisado == true || gestion?.es_staff == true,
                                 onReply = viewModel::onReplyToMessage,
                                 onImageClick = { urls, index -> previewRequest = ImagePreviewRequest(urls, index) },
                                 onOpenDocument = { url, nombre -> openAttachment(context, url) },
@@ -420,6 +422,9 @@ private fun MensajeBubble(
         MaterialTheme.colorScheme.onSurfaceVariant
     }
 
+    var showMenu by remember { mutableStateOf(false) }
+    val mostrarCheck = puedeMarcarRevisado && mensaje.id > 0
+
     Box(modifier = Modifier.fillMaxWidth(), contentAlignment = alignment) {
         Row(
             verticalAlignment = Alignment.Bottom,
@@ -430,105 +435,137 @@ private fun MensajeBubble(
                 ChatAvatar(url = mensaje.avatar_url, iniciales = mensaje.iniciales, colorHex = mensaje.color)
                 Spacer(modifier = Modifier.size(6.dp))
             }
-            Surface(
-            color = backgroundColor,
-            shape = shape,
-            border = BorderStroke(1.dp, borderColor),
-            modifier = Modifier
-                .widthIn(max = 300.dp)
-                .combinedClickable(
-                    onClick = { if (mensaje.estado_envio == "error") onRetry() },
-                    onLongClick = { onReply(mensaje) },
-                ),
-        ) {
-            Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
-                if (!mensaje.es_propio) {
-                    Text(
-                        text = mensaje.remitente ?: "",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Spacer(modifier = Modifier.size(2.dp))
-                }
-                mensaje.reply_to?.let { reply ->
-                    Surface(
-                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.6f),
-                        shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = 6.dp)
-                            .clickable { onJumpToReply(reply.id) },
-                    ) {
-                        Column(modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
+            if (mensaje.es_propio && mostrarCheck) {
+                MarcarListoButton(revisado = mensaje.revisado, onClick = { onToggleRevisado(mensaje) })
+            }
+            Box {
+                Surface(
+                    color = backgroundColor,
+                    shape = shape,
+                    border = BorderStroke(1.dp, borderColor),
+                    modifier = Modifier
+                        .widthIn(max = 280.dp)
+                        .combinedClickable(
+                            onClick = { if (mensaje.estado_envio == "error") onRetry() },
+                            onLongClick = { showMenu = true },
+                        ),
+                ) {
+                    Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                        if (!mensaje.es_propio) {
                             Text(
-                                text = reply.remitente ?: "Mensaje",
+                                text = mensaje.remitente ?: "",
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.SemiBold,
-                                color = Orange600,
-                            )
-                            Text(
-                                text = reply.texto ?: if (reply.tiene_imagen) "Adjunto" else "",
-                                style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1,
                             )
+                            Spacer(modifier = Modifier.size(2.dp))
+                        }
+                        mensaje.reply_to?.let { reply ->
+                            Surface(
+                                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.6f),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(bottom = 6.dp)
+                                    .clickable { onJumpToReply(reply.id) },
+                            ) {
+                                Column(modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
+                                    Text(
+                                        text = reply.remitente ?: "Mensaje",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = Orange600,
+                                    )
+                                    Text(
+                                        text = reply.texto ?: if (reply.tiene_imagen) "Adjunto" else "",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1,
+                                    )
+                                }
+                            }
+                        }
+                        if (!mensaje.texto.isNullOrBlank()) {
+                            Text(text = mensaje.texto, color = textColor, style = MaterialTheme.typography.bodyMedium)
+                        }
+                        if (mensaje.imagenes.isNotEmpty()) {
+                            Spacer(modifier = Modifier.size(4.dp))
+                            AdjuntosMensaje(
+                                adjuntos = mensaje.imagenes,
+                                onImageClick = onImageClick,
+                                onOpenDocument = onOpenDocument,
+                            )
+                        }
+                        Spacer(modifier = Modifier.size(2.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.End,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            if (mensaje.estado_envio == "error") {
+                                Text(
+                                    text = "Reintentar",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.error,
+                                )
+                                Spacer(modifier = Modifier.size(6.dp))
+                            }
+                            Text(
+                                text = mensaje.marca_tiempo ?: "",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            if (mensaje.es_propio) {
+                                Spacer(modifier = Modifier.size(4.dp))
+                                LecturaIndicator(estado = mensaje.estado_envio, leido = mensaje.leido)
+                            }
+                            if (!mostrarCheck && mensaje.revisado) {
+                                Spacer(modifier = Modifier.size(4.dp))
+                                Icon(
+                                    imageVector = Icons.Filled.CheckCircle,
+                                    contentDescription = "Listo",
+                                    tint = Green600,
+                                    modifier = Modifier.size(14.dp),
+                                )
+                            }
                         }
                     }
                 }
-                if (!mensaje.texto.isNullOrBlank()) {
-                    Text(text = mensaje.texto, color = textColor, style = MaterialTheme.typography.bodyMedium)
-                }
-                if (mensaje.imagenes.isNotEmpty()) {
-                    Spacer(modifier = Modifier.size(4.dp))
-                    AdjuntosMensaje(
-                        adjuntos = mensaje.imagenes,
-                        onImageClick = onImageClick,
-                        onOpenDocument = onOpenDocument,
+                DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                    DropdownMenuItem(
+                        text = { Text("Responder") },
+                        onClick = {
+                            showMenu = false
+                            onReply(mensaje)
+                        },
                     )
-                }
-                Spacer(modifier = Modifier.size(2.dp))
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
-                    if (mensaje.estado_envio == "error") {
-                        Text(
-                            text = "Reintentar",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.error,
-                        )
-                        Spacer(modifier = Modifier.size(6.dp))
-                    }
-                    Text(
-                        text = mensaje.marca_tiempo ?: "",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    if (mensaje.es_propio) {
-                        Spacer(modifier = Modifier.size(4.dp))
-                        LecturaIndicator(estado = mensaje.estado_envio, leido = mensaje.leido)
-                    }
-                    if (puedeMarcarRevisado && mensaje.id > 0) {
-                        Spacer(modifier = Modifier.size(2.dp))
-                        Icon(
-                            imageVector = if (mensaje.revisado) Icons.Filled.CheckCircle else Icons.Filled.Done,
-                            contentDescription = if (mensaje.revisado) "Quitar hecho" else "Marcar como hecho",
-                            tint = if (mensaje.revisado) Green600 else MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier
-                                .size(18.dp)
-                                .clickable { onToggleRevisado(mensaje) },
-                        )
-                    } else if (mensaje.revisado) {
-                        Spacer(modifier = Modifier.size(4.dp))
-                        Icon(
-                            imageVector = Icons.Filled.CheckCircle,
-                            contentDescription = "Hecho",
-                            tint = Green600,
-                            modifier = Modifier.size(14.dp),
+                    if (mostrarCheck) {
+                        DropdownMenuItem(
+                            text = { Text(if (mensaje.revisado) "Quitar listo" else "Marcar como listo") },
+                            onClick = {
+                                showMenu = false
+                                onToggleRevisado(mensaje)
+                            },
                         )
                     }
                 }
             }
+            if (!mensaje.es_propio && mostrarCheck) {
+                MarcarListoButton(revisado = mensaje.revisado, onClick = { onToggleRevisado(mensaje) })
             }
         }
+    }
+}
+
+@Composable
+private fun MarcarListoButton(revisado: Boolean, onClick: () -> Unit) {
+    IconButton(onClick = onClick, modifier = Modifier.size(36.dp)) {
+        Icon(
+            imageVector = if (revisado) Icons.Filled.CheckCircle else Icons.Outlined.CheckCircle,
+            contentDescription = if (revisado) "Quitar listo" else "Marcar como listo",
+            tint = if (revisado) Green600 else MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(22.dp),
+        )
     }
 }
 
