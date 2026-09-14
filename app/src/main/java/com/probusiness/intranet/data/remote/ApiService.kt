@@ -8,6 +8,7 @@ import com.probusiness.intranet.data.remote.dto.LoginRequest
 import com.probusiness.intranet.data.remote.dto.LoginResponse
 import com.probusiness.intranet.data.remote.dto.LogoutRequest
 import com.probusiness.intranet.data.remote.dto.MarcarLeidosRequest
+import com.probusiness.intranet.data.remote.dto.MarcarRevisadoRequest
 import com.probusiness.intranet.data.remote.dto.MeResponse
 import com.probusiness.intranet.data.remote.dto.MensajeDetailResponse
 import com.probusiness.intranet.data.remote.dto.MensajesResponse
@@ -91,4 +92,11 @@ interface ApiService {
         @Path("chatUuid") chatUuid: String,
         @Body request: MarcarLeidosRequest,
     ): ApiMessageResponse
+
+    @PATCH("soporte-ti/chats/{chatUuid}/mensajes/{mensajeId}/revisado")
+    suspend fun marcarRevisado(
+        @Path("chatUuid") chatUuid: String,
+        @Path("mensajeId") mensajeId: Int,
+        @Body request: MarcarRevisadoRequest,
+    ): MensajeDetailResponse
 }

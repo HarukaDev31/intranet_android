@@ -29,6 +29,9 @@ data class GestionDto(
     val complejidad_valor: String? = null,
     val complejidad_pm_valor: String? = null,
     val complejidad_analista_valor: String? = null,
+    val estado_editable: Boolean = true,
+    val puede_en_progreso: Boolean = true,
+    val puede_marcar_revisado: Boolean = false,
 )
 
 @Serializable
@@ -143,4 +146,9 @@ data class MensajeDetailResponse(
 @Serializable
 data class MarcarLeidosRequest(
     val mensaje_ids: List<Int>,
+)
+
+@Serializable
+data class MarcarRevisadoRequest(
+    val revisado: Boolean,
 )

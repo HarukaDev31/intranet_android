@@ -19,14 +19,20 @@ class RealtimeService @Inject constructor(
 ) {
     private val socket = ReverbSocket(LaravelChannelAuthorizer(sessionManager))
 
-    fun subscribeToChat(chatUuid: String, onMensajeCreadoJson: (String) -> Unit) {
+    fun subscribeToChat(
+        chatUuid: String,
+        onMensajeCreadoJson: (String) -> Unit,
+        onMensajeActualizadoJson: ((String) -> Unit)? = null,
+    ) {
         val channelName = "private-soporte-ti.chat.$chatUuid"
         socket.subscribe(channelName) { eventName, data ->
-            if (eventName != "SoporteTiMensajeCreado") return@subscribe
             val mensajeJson = runCatching {
                 JSONObject(data).optJSONObject("mensaje")?.toString()
             }.getOrNull() ?: return@subscribe
-            onMensajeCreadoJson(mensajeJson)
+            when (eventName) {
+                "SoporteTiMensajeCreado" -> onMensajeCreadoJson(mensajeJson)
+                "SoporteTiMensajeActualizado" -> onMensajeActualizadoJson?.invoke(mensajeJson)
+            }
         }
     }
 

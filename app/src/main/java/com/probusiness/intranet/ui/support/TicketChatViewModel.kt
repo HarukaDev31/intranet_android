@@ -96,23 +96,42 @@ class TicketChatViewModel @Inject constructor(
     private fun suscribirseATiempoReal(chatUuid: String) {
         if (subscribedChatUuid == chatUuid) return
         subscribedChatUuid = chatUuid
-        realtimeService.subscribeToChat(chatUuid) { mensajeJson ->
-            val nuevo = runCatching { json.decodeFromString(MensajeDto.serializer(), mensajeJson) }.getOrNull()
-                ?: return@subscribeToChat
-            _uiState.update { state ->
-                if (state.mensajes.any { it.id == nuevo.id }) return@update state
-                val sinOptimista = state.mensajes.filterNot { local ->
-                    local.id < 0 &&
-                        local.es_propio &&
-                        nuevo.es_propio &&
-                        (local.texto ?: "") == (nuevo.texto ?: "")
+        realtimeService.subscribeToChat(
+            chatUuid,
+            onMensajeCreadoJson = { mensajeJson ->
+                val nuevo = runCatching { json.decodeFromString(MensajeDto.serializer(), mensajeJson) }.getOrNull()
+                    ?: return@onMensajeCreadoJson
+                _uiState.update { state ->
+                    if (state.mensajes.any { it.id == nuevo.id }) return@update state
+                    val sinOptimista = state.mensajes.filterNot { local ->
+                        local.id < 0 &&
+                            local.es_propio &&
+                            nuevo.es_propio &&
+                            (local.texto ?: "") == (nuevo.texto ?: "")
+                    }
+                    state.copy(mensajes = sinOptimista + nuevo.withEstado(if (nuevo.leido) "leido" else "entregado"))
                 }
-                state.copy(mensajes = sinOptimista + nuevo.withEstado(if (nuevo.leido) "leido" else "entregado"))
-            }
-            if (!nuevo.leido && !nuevo.es_propio) {
-                marcarComoLeidos(chatUuid, listOf(nuevo))
-            }
-        }
+                if (!nuevo.leido && !nuevo.es_propio) {
+                    marcarComoLeidos(chatUuid, listOf(nuevo))
+                }
+            },
+            onMensajeActualizadoJson = { mensajeJson ->
+                val actualizado = runCatching { json.decodeFromString(MensajeDto.serializer(), mensajeJson) }.getOrNull()
+                    ?: return@onMensajeActualizadoJson
+                _uiState.update { state ->
+                    if (state.mensajes.none { it.id == actualizado.id }) return@update state
+                    state.copy(
+                        mensajes = state.mensajes.map { existing ->
+                            if (existing.id != actualizado.id) existing
+                            else actualizado.copy(
+                                estado_envio = existing.estado_envio,
+                                client_id = existing.client_id,
+                            )
+                        },
+                    )
+                }
+            },
+        )
     }
 
     fun reintentarCargarMensajes() {
@@ -212,6 +231,45 @@ class TicketChatViewModel @Inject constructor(
                 .onFailure { throwable ->
                     _uiState.update {
                         it.copy(isUpdatingGestion = false, gestionError = throwable.message ?: "No se pudo cambiar la complejidad")
+                    }
+                }
+        }
+    }
+
+    fun toggleRevisado(mensaje: MensajeDto) {
+        val chatUuid = _uiState.value.solicitud?.chat_uuid ?: return
+        if (mensaje.id <= 0 || mensaje.es_sistema) return
+        val nuevo = !mensaje.revisado
+        _uiState.update { state ->
+            state.copy(
+                mensajes = state.mensajes.map {
+                    if (it.id == mensaje.id) it.copy(revisado = nuevo) else it
+                },
+            )
+        }
+        viewModelScope.launch {
+            supportRepository.marcarRevisado(chatUuid, mensaje.id, nuevo)
+                .onSuccess { actualizado ->
+                    _uiState.update { state ->
+                        state.copy(
+                            mensajes = state.mensajes.map { existing ->
+                                if (existing.id != actualizado.id) existing
+                                else actualizado.copy(
+                                    estado_envio = existing.estado_envio,
+                                    client_id = existing.client_id,
+                                )
+                            },
+                        )
+                    }
+                }
+                .onFailure { throwable ->
+                    _uiState.update { state ->
+                        state.copy(
+                            error = throwable.message ?: "No se pudo marcar el mensaje",
+                            mensajes = state.mensajes.map {
+                                if (it.id == mensaje.id) it.copy(revisado = mensaje.revisado) else it
+                            },
+                        )
                     }
                 }
         }

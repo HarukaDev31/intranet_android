@@ -343,11 +343,13 @@ fun TicketChatScreen(
                         items(uiState.mensajes, key = { "${it.client_id ?: it.id}" }) { mensaje ->
                             MensajeBubble(
                                 mensaje = mensaje,
+                                puedeMarcarRevisado = uiState.solicitud?.gestion?.puede_marcar_revisado == true,
                                 onReply = viewModel::onReplyToMessage,
                                 onImageClick = { urls, index -> previewRequest = ImagePreviewRequest(urls, index) },
                                 onOpenDocument = { url, nombre -> openAttachment(context, url) },
                                 onJumpToReply = viewModel::irAlMensaje,
                                 onRetry = { viewModel.reintentarEnvio(context, mensaje) },
+                                onToggleRevisado = viewModel::toggleRevisado,
                             )
                         }
                     }
@@ -383,11 +385,13 @@ fun TicketChatScreen(
 @Composable
 private fun MensajeBubble(
     mensaje: MensajeDto,
+    puedeMarcarRevisado: Boolean,
     onReply: (MensajeDto) -> Unit,
     onImageClick: (List<String>, Int) -> Unit,
     onOpenDocument: (String, String) -> Unit,
     onJumpToReply: (Int?) -> Unit,
     onRetry: () -> Unit,
+    onToggleRevisado: (MensajeDto) -> Unit,
 ) {
     if (mensaje.es_sistema) {
         SystemMessageBubble(mensaje)
@@ -400,15 +404,15 @@ private fun MensajeBubble(
     } else {
         RoundedCornerShape(topStart = 6.dp, topEnd = 18.dp, bottomEnd = 18.dp, bottomStart = 18.dp)
     }
-    val backgroundColor = if (mensaje.es_propio) {
-        MaterialTheme.colorScheme.primaryContainer
-    } else {
-        MaterialTheme.colorScheme.surfaceVariant
+    val backgroundColor = when {
+        mensaje.revisado -> Green600.copy(alpha = 0.12f)
+        mensaje.es_propio -> MaterialTheme.colorScheme.primaryContainer
+        else -> MaterialTheme.colorScheme.surfaceVariant
     }
-    val borderColor = if (mensaje.es_propio) {
-        MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
-    } else {
-        MaterialTheme.colorScheme.outlineVariant
+    val borderColor = when {
+        mensaje.revisado -> Green600.copy(alpha = 0.4f)
+        mensaje.es_propio -> MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
+        else -> MaterialTheme.colorScheme.outlineVariant
     }
     val textColor = if (mensaje.es_propio) {
         MaterialTheme.colorScheme.onPrimaryContainer
@@ -502,11 +506,21 @@ private fun MensajeBubble(
                         Spacer(modifier = Modifier.size(4.dp))
                         LecturaIndicator(estado = mensaje.estado_envio, leido = mensaje.leido)
                     }
-                    if (mensaje.revisado) {
+                    if (puedeMarcarRevisado && mensaje.id > 0) {
+                        Spacer(modifier = Modifier.size(2.dp))
+                        Icon(
+                            imageVector = if (mensaje.revisado) Icons.Filled.CheckCircle else Icons.Filled.Done,
+                            contentDescription = if (mensaje.revisado) "Quitar hecho" else "Marcar como hecho",
+                            tint = if (mensaje.revisado) Green600 else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier
+                                .size(18.dp)
+                                .clickable { onToggleRevisado(mensaje) },
+                        )
+                    } else if (mensaje.revisado) {
                         Spacer(modifier = Modifier.size(4.dp))
                         Icon(
                             imageVector = Icons.Filled.CheckCircle,
-                            contentDescription = "Revisado",
+                            contentDescription = "Hecho",
                             tint = Green600,
                             modifier = Modifier.size(14.dp),
                         )
@@ -891,6 +905,7 @@ private fun TicketInfoSheetContent(
 
             if (gestion.puede_estado && gestion.estados.isNotEmpty()) {
                 SectionLabel("Estado")
+                val actual = gestion.estado_valor ?: solicitud.estado_codigo
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier
@@ -898,9 +913,13 @@ private fun TicketInfoSheetContent(
                         .horizontalScroll(rememberScrollState()),
                 ) {
                     gestion.estados.forEach { opcion ->
+                        val selected = opcion.codigo == actual
+                        val bloqueadoEnProgreso = opcion.codigo == "en_progreso" && !gestion.puede_en_progreso && !selected
+                        val enabled = !isUpdating && (selected || (gestion.estado_editable && !bloqueadoEnProgreso))
                         FilterChip(
-                            selected = opcion.codigo == (gestion.estado_valor ?: solicitud.estado_codigo),
-                            onClick = { if (!isUpdating) onCambiarEstado(opcion.codigo) },
+                            selected = selected,
+                            enabled = enabled,
+                            onClick = { if (enabled && !selected) onCambiarEstado(opcion.codigo) },
                             label = { Text(opcion.nombre) },
                             colors = FilterChipDefaults.filterChipColors(
                                 selectedContainerColor = Orange600,

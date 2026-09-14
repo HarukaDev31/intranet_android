@@ -4,6 +4,7 @@ import com.probusiness.intranet.data.remote.ApiService
 import com.probusiness.intranet.data.remote.dto.ActualizarComplejidadRequest
 import com.probusiness.intranet.data.remote.dto.ActualizarEstadoRequest
 import com.probusiness.intranet.data.remote.dto.MarcarLeidosRequest
+import com.probusiness.intranet.data.remote.dto.MarcarRevisadoRequest
 import com.probusiness.intranet.data.remote.dto.MensajeDto
 import com.probusiness.intranet.data.remote.dto.MensajesResponse
 import com.probusiness.intranet.data.remote.dto.SolicitudDto
@@ -86,6 +87,11 @@ class SupportRepository @Inject constructor(
         if (mensajeIds.isEmpty()) return@runCatching
         apiService.marcarLeidos(chatUuid, MarcarLeidosRequest(mensajeIds))
         Unit
+    }
+
+    suspend fun marcarRevisado(chatUuid: String, mensajeId: Int, revisado: Boolean): Result<MensajeDto> = runCatching {
+        apiService.marcarRevisado(chatUuid, mensajeId, MarcarRevisadoRequest(revisado)).data
+            ?: error("No se pudo marcar el mensaje")
     }
 
     private fun String.toPlainBody(): RequestBody =
