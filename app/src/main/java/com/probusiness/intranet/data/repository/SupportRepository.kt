@@ -7,6 +7,7 @@ import com.probusiness.intranet.data.remote.dto.MarcarLeidosRequest
 import com.probusiness.intranet.data.remote.dto.MensajeDto
 import com.probusiness.intranet.data.remote.dto.MensajesResponse
 import com.probusiness.intranet.data.remote.dto.SolicitudDto
+import com.probusiness.intranet.util.CopiedAttachment
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
 import okhttp3.RequestBody
@@ -68,13 +69,15 @@ class SupportRepository @Inject constructor(
         solicitudId: Int,
         texto: String?,
         replyToId: Int?,
-        imagenes: List<File>,
+        imagenes: List<CopiedAttachment>,
     ): Result<MensajeDto> = runCatching {
         val response = apiService.enviarMensaje(
             solicitudId = solicitudId,
             texto = texto?.toPlainBody(),
             replyToId = replyToId?.toString()?.toPlainBody(),
-            imagenes = imagenes.mapIndexed { index, file -> file.toMultipart("imagenes[$index]") },
+            imagenes = imagenes.mapIndexed { index, attachment ->
+                attachment.file.toMultipart("imagenes[$index]", attachment.mime, attachment.displayName)
+            },
         )
         response.data ?: error("No se pudo enviar el mensaje")
     }
@@ -89,7 +92,11 @@ class SupportRepository @Inject constructor(
         this.toRequestBody("text/plain".toMediaTypeOrNull())
 
     private fun File.toMultipart(fieldName: String): MultipartBody.Part {
-        val body = this.asRequestBody("image/*".toMediaTypeOrNull())
-        return MultipartBody.Part.createFormData(fieldName, this.name, body)
+        return toMultipart(fieldName, "image/*", this.name)
+    }
+
+    private fun File.toMultipart(fieldName: String, mime: String, filename: String): MultipartBody.Part {
+        val body = this.asRequestBody(mime.toMediaTypeOrNull())
+        return MultipartBody.Part.createFormData(fieldName, filename, body)
     }
 }

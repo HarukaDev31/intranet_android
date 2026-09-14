@@ -5,12 +5,14 @@ import android.net.Uri
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.probusiness.intranet.data.remote.dto.ImagenDto
 import com.probusiness.intranet.data.remote.dto.MensajeDto
 import com.probusiness.intranet.data.remote.dto.SolicitudDto
 import com.probusiness.intranet.data.remote.realtime.ActiveChatTracker
 import com.probusiness.intranet.data.remote.realtime.RealtimeService
 import com.probusiness.intranet.data.repository.SupportRepository
 import com.probusiness.intranet.ui.navigation.Routes
+import com.probusiness.intranet.util.PendingAttachment
 import com.probusiness.intranet.util.UriFileHelper
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -18,6 +20,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
+import java.util.UUID
 import javax.inject.Inject
 
 data class TicketChatUiState(
@@ -29,12 +32,13 @@ data class TicketChatUiState(
     val isLoadingMore: Boolean = false,
     val isSending: Boolean = false,
     val texto: String = "",
-    val imagenes: List<Uri> = emptyList(),
+    val adjuntos: List<PendingAttachment> = emptyList(),
     val error: String? = null,
     val mensajesError: String? = null,
     val replyTarget: MensajeDto? = null,
     val isUpdatingGestion: Boolean = false,
     val gestionError: String? = null,
+    val scrollToMessageId: Int? = null,
 )
 
 @HiltViewModel
@@ -97,7 +101,13 @@ class TicketChatViewModel @Inject constructor(
                 ?: return@subscribeToChat
             _uiState.update { state ->
                 if (state.mensajes.any { it.id == nuevo.id }) return@update state
-                state.copy(mensajes = state.mensajes + nuevo)
+                val sinOptimista = state.mensajes.filterNot { local ->
+                    local.id < 0 &&
+                        local.es_propio &&
+                        nuevo.es_propio &&
+                        (local.texto ?: "") == (nuevo.texto ?: "")
+                }
+                state.copy(mensajes = sinOptimista + nuevo.withEstado(if (nuevo.leido) "leido" else "entregado"))
             }
             if (!nuevo.leido && !nuevo.es_propio) {
                 marcarComoLeidos(chatUuid, listOf(nuevo))
@@ -117,7 +127,15 @@ class TicketChatViewModel @Inject constructor(
                 .onSuccess { response ->
                     _uiState.update {
                         it.copy(
-                            mensajes = response.data,
+                            mensajes = response.data.map { msg ->
+                                msg.withEstado(
+                                    when {
+                                        !msg.es_propio -> null
+                                        msg.leido -> "leido"
+                                        else -> "entregado"
+                                    },
+                                )
+                            },
                             hasMore = response.pagination?.has_more ?: false,
                             isLoadingMensajes = false,
                         )
@@ -138,7 +156,7 @@ class TicketChatViewModel @Inject constructor(
     fun cargarMasAntiguos() {
         val state = _uiState.value
         val chatUuid = state.solicitud?.chat_uuid ?: return
-        val oldestId = state.mensajes.firstOrNull()?.id ?: return
+        val oldestId = state.mensajes.firstOrNull { it.id > 0 }?.id ?: return
         if (!state.hasMore || state.isLoadingMore) return
 
         viewModelScope.launch {
@@ -147,7 +165,9 @@ class TicketChatViewModel @Inject constructor(
                 .onSuccess { response ->
                     _uiState.update {
                         it.copy(
-                            mensajes = response.data + it.mensajes,
+                            mensajes = response.data + it.mensajes.filter { msg ->
+                                response.data.none { incoming -> incoming.id == msg.id }
+                            },
                             hasMore = response.pagination?.has_more ?: false,
                             isLoadingMore = false,
                         )
@@ -160,7 +180,7 @@ class TicketChatViewModel @Inject constructor(
     }
 
     private fun marcarComoLeidos(chatUuid: String, mensajes: List<MensajeDto>) {
-        val idsNoLeidos = mensajes.filter { !it.leido && !it.es_propio }.map { it.id }
+        val idsNoLeidos = mensajes.filter { !it.leido && !it.es_propio && it.id > 0 }.map { it.id }
         if (idsNoLeidos.isEmpty()) return
         viewModelScope.launch {
             supportRepository.marcarLeidos(chatUuid, idsNoLeidos)
@@ -198,39 +218,127 @@ class TicketChatViewModel @Inject constructor(
     }
 
     fun onTextoChange(value: String) = _uiState.update { it.copy(texto = value) }
-    fun onImagenesSeleccionadas(uris: List<Uri>) = _uiState.update { it.copy(imagenes = uris) }
+
+    fun insertarEmoji(emoji: String) {
+        _uiState.update { it.copy(texto = it.texto + emoji) }
+    }
+
+    fun onAdjuntosSeleccionados(context: Context, uris: List<Uri>) {
+        if (uris.isEmpty()) return
+        val nuevos = uris.map { UriFileHelper.pendingFromUri(context, it) }
+        _uiState.update { it.copy(adjuntos = (it.adjuntos + nuevos).distinctBy { att -> att.uri }) }
+    }
+
+    fun quitarAdjunto(uri: Uri) {
+        _uiState.update { it.copy(adjuntos = it.adjuntos.filterNot { att -> att.uri == uri }) }
+    }
+
     fun onReplyToMessage(mensaje: MensajeDto) = _uiState.update { it.copy(replyTarget = mensaje) }
     fun onCancelReply() = _uiState.update { it.copy(replyTarget = null) }
 
+    fun irAlMensaje(id: Int?) {
+        if (id == null) return
+        _uiState.update { it.copy(scrollToMessageId = id) }
+    }
+
+    fun onScrolledToMessage() {
+        _uiState.update { it.copy(scrollToMessageId = null) }
+    }
+
+    fun reintentarEnvio(context: Context, mensaje: MensajeDto) {
+        if (mensaje.estado_envio != "error") return
+        _uiState.update { state ->
+            state.copy(mensajes = state.mensajes.filterNot { it.client_id == mensaje.client_id && it.id == mensaje.id })
+        }
+        enviar(
+            context = context,
+            textoForzado = mensaje.texto,
+            replyToId = mensaje.reply_to_id,
+        )
+    }
+
     fun enviar(context: Context) {
         val state = _uiState.value
-        val texto = state.texto.trim()
-        if (texto.isEmpty() && state.imagenes.isEmpty()) return
+        enviar(context, state.texto.trim().ifBlank { null }, state.replyTarget?.id)
+    }
+
+    private fun enviar(context: Context, textoForzado: String?, replyToId: Int?) {
+        val state = _uiState.value
+        val texto = textoForzado?.trim().orEmpty()
+        if (texto.isEmpty() && state.adjuntos.isEmpty()) return
+
+        val clientId = UUID.randomUUID().toString()
+        val optimistic = MensajeDto(
+            id = -(kotlin.math.abs(clientId.hashCode()).coerceAtLeast(1)),
+            remitente = "Tú",
+            texto = texto.ifBlank { null },
+            es_propio = true,
+            marca_tiempo = "ahora",
+            reply_to_id = replyToId,
+            reply_to = state.replyTarget?.let {
+                com.probusiness.intranet.data.remote.dto.ReplyToDto(
+                    id = it.id,
+                    remitente = it.remitente,
+                    texto = it.texto,
+                    tiene_imagen = it.imagenes.isNotEmpty(),
+                    imagen_url = it.imagenes.firstOrNull()?.url,
+                )
+            },
+            imagenes = state.adjuntos.map { ImagenDto(url = it.uri.toString(), nombre = it.displayName) },
+            client_id = clientId,
+            estado_envio = "enviando",
+        )
 
         viewModelScope.launch {
-            _uiState.update { it.copy(isSending = true, error = null) }
-            val archivos = state.imagenes.mapNotNull { UriFileHelper.copyToCache(context, it) }
+            _uiState.update {
+                it.copy(
+                    isSending = true,
+                    error = null,
+                    texto = "",
+                    replyTarget = null,
+                    adjuntos = emptyList(),
+                    mensajes = it.mensajes + optimistic,
+                )
+            }
+            val archivos = state.adjuntos.mapNotNull { UriFileHelper.copyAttachment(context, it.uri) }
 
             supportRepository.enviarMensaje(
                 solicitudId = solicitudId,
                 texto = texto.ifBlank { null },
-                replyToId = state.replyTarget?.id,
+                replyToId = replyToId,
                 imagenes = archivos,
             ).onSuccess { mensaje ->
-                _uiState.update {
-                    it.copy(
+                _uiState.update { current ->
+                    current.copy(
                         isSending = false,
-                        texto = "",
-                        imagenes = emptyList(),
-                        replyTarget = null,
-                        mensajes = it.mensajes + mensaje,
+                        mensajes = current.mensajes.map { existing ->
+                            if (existing.client_id == clientId) {
+                                mensaje.withEstado("entregado").copy(client_id = clientId)
+                            } else {
+                                existing
+                            }
+                        }.let { lista ->
+                            if (lista.none { it.id == mensaje.id || it.client_id == clientId }) {
+                                lista + mensaje.withEstado("entregado")
+                            } else {
+                                lista
+                            }
+                        },
                     )
                 }
             }.onFailure { throwable ->
-                _uiState.update {
-                    it.copy(isSending = false, error = throwable.message ?: "No se pudo enviar el mensaje")
+                _uiState.update { current ->
+                    current.copy(
+                        isSending = false,
+                        error = throwable.message ?: "No se pudo enviar el mensaje",
+                        mensajes = current.mensajes.map { existing ->
+                            if (existing.client_id == clientId) existing.copy(estado_envio = "error") else existing
+                        },
+                    )
                 }
             }
         }
     }
 }
+
+private fun MensajeDto.withEstado(estado: String?): MensajeDto = copy(estado_envio = estado)

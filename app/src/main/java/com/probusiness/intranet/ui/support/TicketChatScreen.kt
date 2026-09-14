@@ -35,6 +35,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.filled.Send
@@ -80,11 +81,26 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
+import androidx.compose.foundation.background
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items as gridItems
+import androidx.compose.material.icons.filled.InsertEmoticon
+import androidx.compose.material.icons.outlined.Description
+import androidx.compose.material.icons.outlined.Image
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import com.probusiness.intranet.data.remote.dto.ImagenDto
 import com.probusiness.intranet.data.remote.dto.MensajeDto
 import com.probusiness.intranet.data.remote.dto.SolicitudDto
-import kotlinx.coroutines.launch
+import com.probusiness.intranet.ui.theme.Green600
 import com.probusiness.intranet.ui.theme.Orange600
 import com.probusiness.intranet.ui.theme.Sky500
+import com.probusiness.intranet.util.PendingAttachment
+import com.probusiness.intranet.util.extensionOf
+import com.probusiness.intranet.util.isInlineImage
+import com.probusiness.intranet.util.openAttachment
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -119,10 +135,24 @@ fun TicketChatScreen(
 
     val pickImages = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetMultipleContents(),
-    ) { uris -> viewModel.onImagenesSeleccionadas(uris) }
+    ) { uris -> viewModel.onAdjuntosSeleccionados(context, uris) }
+    val pickFiles = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenMultipleDocuments(),
+    ) { uris -> viewModel.onAdjuntosSeleccionados(context, uris) }
 
     var showInfoSheet by remember { mutableStateOf(false) }
+    var showAttachMenu by remember { mutableStateOf(false) }
+    var showEmojiSheet by remember { mutableStateOf(false) }
     var previewRequest by remember { mutableStateOf<ImagePreviewRequest?>(null) }
+
+    LaunchedEffect(uiState.scrollToMessageId, uiState.mensajes.size) {
+        val targetId = uiState.scrollToMessageId ?: return@LaunchedEffect
+        val index = uiState.mensajes.indexOfFirst { it.id == targetId }
+        if (index >= 0) {
+            listState.animateScrollToItem(index)
+            viewModel.onScrolledToMessage()
+        }
+    }
 
     previewRequest?.let { request ->
         ImagePreviewDialog(request = request, onDismiss = { previewRequest = null })
@@ -136,6 +166,17 @@ fun TicketChatScreen(
                 error = uiState.gestionError,
                 onCambiarEstado = viewModel::cambiarEstado,
                 onCambiarComplejidad = viewModel::cambiarComplejidad,
+            )
+        }
+    }
+
+    if (showEmojiSheet) {
+        ModalBottomSheet(onDismissRequest = { showEmojiSheet = false }) {
+            EmojiPickerSheet(
+                onPick = { emoji ->
+                    viewModel.insertarEmoji(emoji)
+                    showEmojiSheet = false
+                },
             )
         }
     }
@@ -175,15 +216,21 @@ fun TicketChatScreen(
                     .navigationBarsPadding()
                     .imePadding(),
             ) {
+                if (uiState.error != null) {
+                    Text(
+                        text = uiState.error.orEmpty(),
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                    )
+                }
                 if (uiState.replyTarget != null) {
                     ReplyPreviewBar(mensaje = uiState.replyTarget!!, onCancel = viewModel::onCancelReply)
                 }
-                if (uiState.imagenes.isNotEmpty()) {
-                    Text(
-                        text = "${uiState.imagenes.size} imagen(es) adjunta(s)",
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                if (uiState.adjuntos.isNotEmpty()) {
+                    PendingAttachmentsRow(
+                        adjuntos = uiState.adjuntos,
+                        onRemove = viewModel::quitarAdjunto,
                     )
                 }
                 Surface(tonalElevation = 3.dp) {
@@ -193,8 +240,31 @@ fun TicketChatScreen(
                             .padding(10.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        IconButton(onClick = { pickImages.launch("image/*") }) {
-                            Icon(Icons.Outlined.AttachFile, contentDescription = "Adjuntar imagen")
+                        Box {
+                            IconButton(onClick = { showAttachMenu = true }) {
+                                Icon(Icons.Outlined.AttachFile, contentDescription = "Adjuntar")
+                            }
+                            DropdownMenu(expanded = showAttachMenu, onDismissRequest = { showAttachMenu = false }) {
+                                DropdownMenuItem(
+                                    text = { Text("Imágenes") },
+                                    leadingIcon = { Icon(Icons.Outlined.Image, contentDescription = null) },
+                                    onClick = {
+                                        showAttachMenu = false
+                                        pickImages.launch("image/*")
+                                    },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Documento") },
+                                    leadingIcon = { Icon(Icons.Outlined.Description, contentDescription = null) },
+                                    onClick = {
+                                        showAttachMenu = false
+                                        pickFiles.launch(arrayOf("*/*"))
+                                    },
+                                )
+                            }
+                        }
+                        IconButton(onClick = { showEmojiSheet = true }) {
+                            Icon(Icons.Filled.InsertEmoticon, contentDescription = "Emoji")
                         }
                         OutlinedTextField(
                             value = uiState.texto,
@@ -270,11 +340,14 @@ fun TicketChatScreen(
                                 }
                             }
                         }
-                        items(uiState.mensajes, key = { it.id }) { mensaje ->
+                        items(uiState.mensajes, key = { "${it.client_id ?: it.id}" }) { mensaje ->
                             MensajeBubble(
                                 mensaje = mensaje,
                                 onReply = viewModel::onReplyToMessage,
                                 onImageClick = { urls, index -> previewRequest = ImagePreviewRequest(urls, index) },
+                                onOpenDocument = { url, nombre -> openAttachment(context, url) },
+                                onJumpToReply = viewModel::irAlMensaje,
+                                onRetry = { viewModel.reintentarEnvio(context, mensaje) },
                             )
                         }
                     }
@@ -312,6 +385,9 @@ private fun MensajeBubble(
     mensaje: MensajeDto,
     onReply: (MensajeDto) -> Unit,
     onImageClick: (List<String>, Int) -> Unit,
+    onOpenDocument: (String, String) -> Unit,
+    onJumpToReply: (Int?) -> Unit,
+    onRetry: () -> Unit,
 ) {
     if (mensaje.es_sistema) {
         SystemMessageBubble(mensaje)
@@ -341,13 +417,25 @@ private fun MensajeBubble(
     }
 
     Box(modifier = Modifier.fillMaxWidth(), contentAlignment = alignment) {
-        Surface(
+        Row(
+            verticalAlignment = Alignment.Bottom,
+            horizontalArrangement = if (mensaje.es_propio) Arrangement.End else Arrangement.Start,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            if (!mensaje.es_propio) {
+                ChatAvatar(url = mensaje.avatar_url, iniciales = mensaje.iniciales, colorHex = mensaje.color)
+                Spacer(modifier = Modifier.size(6.dp))
+            }
+            Surface(
             color = backgroundColor,
             shape = shape,
             border = BorderStroke(1.dp, borderColor),
             modifier = Modifier
                 .widthIn(max = 300.dp)
-                .combinedClickable(onClick = {}, onLongClick = { onReply(mensaje) }),
+                .combinedClickable(
+                    onClick = { if (mensaje.estado_envio == "error") onRetry() },
+                    onLongClick = { onReply(mensaje) },
+                ),
         ) {
             Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
                 if (!mensaje.es_propio) {
@@ -365,7 +453,8 @@ private fun MensajeBubble(
                         shape = RoundedCornerShape(8.dp),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(bottom = 6.dp),
+                            .padding(bottom = 6.dp)
+                            .clickable { onJumpToReply(reply.id) },
                     ) {
                         Column(modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
                             Text(
@@ -375,7 +464,7 @@ private fun MensajeBubble(
                                 color = Orange600,
                             )
                             Text(
-                                text = reply.texto ?: if (reply.tiene_imagen) "Imagen adjunta" else "",
+                                text = reply.texto ?: if (reply.tiene_imagen) "Adjunto" else "",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 maxLines = 1,
@@ -388,13 +477,22 @@ private fun MensajeBubble(
                 }
                 if (mensaje.imagenes.isNotEmpty()) {
                     Spacer(modifier = Modifier.size(4.dp))
-                    ImagenesGrid(
-                        imagenes = mensaje.imagenes.map { it.url },
-                        onImageClick = { urls, index -> onImageClick(urls, index) },
+                    AdjuntosMensaje(
+                        adjuntos = mensaje.imagenes,
+                        onImageClick = onImageClick,
+                        onOpenDocument = onOpenDocument,
                     )
                 }
                 Spacer(modifier = Modifier.size(2.dp))
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
+                    if (mensaje.estado_envio == "error") {
+                        Text(
+                            text = "Reintentar",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                        Spacer(modifier = Modifier.size(6.dp))
+                    }
                     Text(
                         text = mensaje.marca_tiempo ?: "",
                         style = MaterialTheme.typography.labelSmall,
@@ -402,7 +500,80 @@ private fun MensajeBubble(
                     )
                     if (mensaje.es_propio) {
                         Spacer(modifier = Modifier.size(4.dp))
-                        LecturaIndicator(leido = mensaje.leido)
+                        LecturaIndicator(estado = mensaje.estado_envio, leido = mensaje.leido)
+                    }
+                    if (mensaje.revisado) {
+                        Spacer(modifier = Modifier.size(4.dp))
+                        Icon(
+                            imageVector = Icons.Filled.CheckCircle,
+                            contentDescription = "Revisado",
+                            tint = Green600,
+                            modifier = Modifier.size(14.dp),
+                        )
+                    }
+                }
+            }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AdjuntosMensaje(
+    adjuntos: List<ImagenDto>,
+    onImageClick: (List<String>, Int) -> Unit,
+    onOpenDocument: (String, String) -> Unit,
+) {
+    val imagenes = adjuntos.filter { isInlineImage(it.nombre, null) && !it.url.isNullOrBlank() }
+    val documentos = adjuntos.filterNot { isInlineImage(it.nombre, null) }
+    val imageUrls = imagenes.mapNotNull { it.url }
+
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        if (imageUrls.isNotEmpty()) {
+            imageUrls.chunked(2).forEachIndexed { filaIndex, fila ->
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    fila.forEachIndexed { itemIndex, url ->
+                        val globalIndex = filaIndex * 2 + itemIndex
+                        AsyncImage(
+                            model = url,
+                            contentDescription = null,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier
+                                .size(120.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .clickable { onImageClick(imageUrls, globalIndex) },
+                        )
+                    }
+                }
+            }
+        }
+        documentos.forEach { doc ->
+            val url = doc.url ?: return@forEach
+            Surface(
+                shape = RoundedCornerShape(10.dp),
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.7f),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onOpenDocument(url, doc.nombre ?: "archivo") },
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Icon(Icons.Outlined.Description, contentDescription = null)
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = doc.nombre ?: "Documento",
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                        )
+                        Text(
+                            text = listOfNotNull(extensionOf(doc.nombre), doc.tamano).joinToString(" · "),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
                 }
             }
@@ -411,36 +582,22 @@ private fun MensajeBubble(
 }
 
 @Composable
-private fun ImagenesGrid(imagenes: List<String?>, onImageClick: (List<String>, Int) -> Unit) {
-    val urls = imagenes.filterNotNull()
-    if (urls.isEmpty()) return
-
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        urls.chunked(2).forEachIndexed { filaIndex, fila ->
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                fila.forEachIndexed { itemIndex, url ->
-                    val globalIndex = filaIndex * 2 + itemIndex
-                    AsyncImage(
-                        model = url,
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier
-                            .size(120.dp)
-                            .clip(RoundedCornerShape(10.dp))
-                            .clickable { onImageClick(urls, globalIndex) },
-                    )
-                }
-            }
-        }
+private fun LecturaIndicator(estado: String?, leido: Boolean) {
+    val icon = when (estado) {
+        "enviando", "pendiente" -> Icons.Outlined.Schedule
+        "error" -> Icons.Outlined.ErrorOutline
+        "leido" -> Icons.Filled.DoneAll
+        else -> if (leido) Icons.Filled.DoneAll else Icons.Filled.Done
     }
-}
-
-@Composable
-private fun LecturaIndicator(leido: Boolean) {
+    val tint = when (estado) {
+        "error" -> MaterialTheme.colorScheme.error
+        "leido" -> Sky500
+        else -> if (leido) Sky500 else MaterialTheme.colorScheme.onSurfaceVariant
+    }
     Icon(
-        imageVector = if (leido) Icons.Filled.DoneAll else Icons.Filled.Done,
+        imageVector = icon,
         contentDescription = null,
-        tint = if (leido) Sky500 else MaterialTheme.colorScheme.onSurfaceVariant,
+        tint = tint,
         modifier = Modifier.size(14.dp),
     )
 }
@@ -530,6 +687,112 @@ private fun ChatEmptyState() {
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+    }
+}
+
+@Composable
+private fun ChatAvatar(url: String?, iniciales: String?, colorHex: String?) {
+    val bg = remember(colorHex) {
+        runCatching { Color(android.graphics.Color.parseColor(colorHex)) }.getOrElse { Sky500 }
+    }
+    Box(
+        modifier = Modifier
+            .size(28.dp)
+            .clip(CircleShape)
+            .background(bg),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (!url.isNullOrBlank()) {
+            AsyncImage(
+                model = url,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+        } else {
+            Text(
+                text = (iniciales ?: "?").take(2),
+                color = Color.White,
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+            )
+        }
+    }
+}
+
+@Composable
+private fun PendingAttachmentsRow(
+    adjuntos: List<PendingAttachment>,
+    onRemove: (android.net.Uri) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        adjuntos.forEach { adjunto ->
+            Surface(shape = RoundedCornerShape(10.dp), tonalElevation = 1.dp) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(start = 8.dp),
+                ) {
+                    if (isInlineImage(adjunto.displayName, adjunto.mime)) {
+                        AsyncImage(
+                            model = adjunto.uri,
+                            contentDescription = null,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(RoundedCornerShape(8.dp)),
+                        )
+                    } else {
+                        Icon(Icons.Outlined.Description, contentDescription = null, modifier = Modifier.size(28.dp))
+                    }
+                    Text(
+                        text = adjunto.displayName,
+                        style = MaterialTheme.typography.labelSmall,
+                        modifier = Modifier
+                            .padding(horizontal = 6.dp)
+                            .widthIn(max = 120.dp),
+                        maxLines = 1,
+                    )
+                    IconButton(onClick = { onRemove(adjunto.uri) }) {
+                        Icon(Icons.Outlined.Close, contentDescription = "Quitar adjunto")
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun EmojiPickerSheet(onPick: (String) -> Unit) {
+    Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+        Text(
+            text = "Emojis",
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.padding(bottom = 8.dp),
+        )
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(8),
+            modifier = Modifier.height(220.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            gridItems(SOPORTE_TI_CHAT_EMOJIS) { emoji ->
+                Text(
+                    text = emoji,
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clickable { onPick(emoji) }
+                        .padding(4.dp),
+                    style = MaterialTheme.typography.titleMedium,
+                )
+            }
+        }
     }
 }
 

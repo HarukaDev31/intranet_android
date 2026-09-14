@@ -1,0 +1,64 @@
+name: Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "app/**"
+      - "gradle/**"
+      - "build.gradle.kts"
+      - "settings.gradle.kts"
+      - "gradle.properties"
+      - ".github/workflows/android-apk.yml"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Inyectar google-services.json
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        run: |
+          if [ -z "$GOOGLE_SERVICES_JSON" ]; then
+            echo "::error::Falta el secret GOOGLE_SERVICES_JSON."
+            echo "GitHub → Settings → Secrets and variables → Actions → New repository secret"
+            echo "Nombre: GOOGLE_SERVICES_JSON"
+            echo "Valor: pega el JSON completo de Firebase (o su contenido en base64)."
+            echo "CLI: gh secret set GOOGLE_SERVICES_JSON < app/google-services.json"
+            exit 1
+          fi
+          python3 - <<'PY'
+          import base64, os, pathlib
+          raw = os.environ["GOOGLE_SERVICES_JSON"].strip()
+          path = pathlib.Path("app/google-services.json")
+          path.parent.mkdir(parents=True, exist_ok=True)
+          if raw.startswith("{"):
+              path.write_text(raw + ("\n" if not raw.endswith("\n") else ""), encoding="utf-8")
+          else:
+              path.write_bytes(base64.b64decode(raw))
+          print("google-services.json escrito:", path, "bytes=", path.stat().st_size)
+          PY
+
+      - name: Permiso Gradle
+        run: chmod +x gradlew
+
+      - name: Compilar APK debug
+        run: ./gradlew assembleDebug --no-daemon --stacktrace
+
+      - name: Subir APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: intranet-android-debug
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error

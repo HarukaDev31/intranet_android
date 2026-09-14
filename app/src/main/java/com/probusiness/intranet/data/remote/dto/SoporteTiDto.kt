@@ -105,6 +105,8 @@ data class MensajeDto(
     val avatar_url: String? = null,
     val texto: String? = null,
     val es_sistema: Boolean = false,
+    val es_maqueta: Boolean = false,
+    val revisado: Boolean = false,
     val marca_tiempo: String? = null,
     val created_at_iso: String? = null,
     val es_propio: Boolean = false,
@@ -112,6 +114,9 @@ data class MensajeDto(
     val reply_to_id: Int? = null,
     val reply_to: ReplyToDto? = null,
     val imagenes: List<ImagenDto> = emptyList(),
+    val archivo_nombre: String? = null,
+    val client_id: String? = null,
+    val estado_envio: String? = null,
 )
 
 @Serializable

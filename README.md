@@ -18,7 +18,8 @@ en sí es válido; lo que falta es tu configuración de Firebase.
 2. **Firebase**: crea (o usa) un proyecto en [Firebase Console](https://console.firebase.google.com/),
    agrega una app Android con el package `com.probusiness.intranet`, descarga el `google-services.json`
    real y reemplaza el archivo placeholder en `app/google-services.json` (el que hay ahora es un
-   placeholder que solo permite compilar, no enviar/recibir push reales).
+   placeholder que solo permite compilar, no enviar/recibir push reales). **No lo subas al git**:
+   está en `.gitignore`. Para CI, cárgalo como secret (ver más abajo).
 3. En el backend, genera una cuenta de servicio (Firebase Console → Configuración del proyecto →
    Cuentas de servicio → Generar nueva clave privada) y configura `FIREBASE_CREDENTIALS` /
    `FIREBASE_PROJECT_ID` en el `.env` del backend (ver `config/firebase.php`).
@@ -58,3 +59,21 @@ en sí es válido; lo que falta es tu configuración de Firebase.
 
 `app/src/main/res/drawable/ic_launcher_foreground.xml` y `ic_launcher_background.xml` son un placeholder
 vectorial (círculo/anillo) — reemplázalos por el logo real de Probusiness cuando lo tengas.
+
+## APKs en GitHub Actions
+
+El workflow `.github/workflows/android-apk.yml` genera el APK debug. El `google-services.json`
+**no va al repositorio**: se inyecta al buildear desde un secret.
+
+1. En GitHub: **Settings → Secrets and variables → Actions → New repository secret**.
+2. Nombre: `GOOGLE_SERVICES_JSON`.
+3. Valor: pega el contenido completo del `google-services.json` de Firebase (el JSON crudo).
+   Si preferís CLI, desde la carpeta de la app:
+
+   ```bash
+   gh secret set GOOGLE_SERVICES_JSON < app/google-services.json
+   ```
+
+4. Corré el workflow: **Actions → Android APK → Run workflow**, o hacé push a `main`.
+5. Cuando termine, descargá el artefacto `intranet-android-debug`.
+
