@@ -12,6 +12,7 @@ import com.probusiness.intranet.data.remote.realtime.ActiveChatTracker
 import com.probusiness.intranet.data.remote.realtime.RealtimeService
 import com.probusiness.intranet.data.repository.SupportRepository
 import com.probusiness.intranet.ui.navigation.Routes
+import com.probusiness.intranet.util.CopiedAttachment
 import com.probusiness.intranet.util.PendingAttachment
 import com.probusiness.intranet.util.UriFileHelper
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -320,6 +321,84 @@ class TicketChatViewModel @Inject constructor(
     fun enviar(context: Context) {
         val state = _uiState.value
         enviar(context, state.texto.trim().ifBlank { null }, state.replyTarget?.id)
+    }
+
+    fun enviarNotaVoz(attachment: CopiedAttachment) {
+        val state = _uiState.value
+        if (state.isSending) return
+        val replyToId = state.replyTarget?.id
+        val clientId = UUID.randomUUID().toString()
+        val optimistic = MensajeDto(
+            id = -(kotlin.math.abs(clientId.hashCode()).coerceAtLeast(1)),
+            remitente = "Tú",
+            texto = null,
+            es_propio = true,
+            marca_tiempo = "ahora",
+            reply_to_id = replyToId,
+            reply_to = state.replyTarget?.let {
+                com.probusiness.intranet.data.remote.dto.ReplyToDto(
+                    id = it.id,
+                    remitente = it.remitente,
+                    texto = it.texto,
+                    tiene_imagen = it.imagenes.isNotEmpty(),
+                    imagen_url = it.imagenes.firstOrNull()?.url,
+                )
+            },
+            imagenes = listOf(
+                ImagenDto(
+                    url = attachment.file.toURI().toString(),
+                    nombre = attachment.displayName,
+                ),
+            ),
+            client_id = clientId,
+            estado_envio = "enviando",
+        )
+
+        viewModelScope.launch {
+            _uiState.update {
+                it.copy(
+                    isSending = true,
+                    error = null,
+                    replyTarget = null,
+                    mensajes = it.mensajes + optimistic,
+                )
+            }
+            supportRepository.enviarMensaje(
+                solicitudId = solicitudId,
+                texto = null,
+                replyToId = replyToId,
+                imagenes = listOf(attachment),
+            ).onSuccess { mensaje ->
+                _uiState.update { current ->
+                    current.copy(
+                        isSending = false,
+                        mensajes = current.mensajes.map { existing ->
+                            if (existing.client_id == clientId) {
+                                mensaje.withEstado("entregado").copy(client_id = clientId)
+                            } else {
+                                existing
+                            }
+                        }.let { lista ->
+                            if (lista.none { it.id == mensaje.id || it.client_id == clientId }) {
+                                lista + mensaje.withEstado("entregado")
+                            } else {
+                                lista
+                            }
+                        },
+                    )
+                }
+            }.onFailure { throwable ->
+                _uiState.update { current ->
+                    current.copy(
+                        isSending = false,
+                        error = throwable.message ?: "No se pudo enviar la nota de voz",
+                        mensajes = current.mensajes.map { existing ->
+                            if (existing.client_id == clientId) existing.copy(estado_envio = "error") else existing
+                        },
+                    )
+                }
+            }
+        }
     }
 
     private fun enviar(context: Context, textoForzado: String?, replyToId: Int?) {

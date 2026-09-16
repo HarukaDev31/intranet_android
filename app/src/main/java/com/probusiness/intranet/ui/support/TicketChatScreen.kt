@@ -1,8 +1,15 @@
 package com.probusiness.intranet.ui.support
 
+import android.Manifest
+import android.media.MediaPlayer
+import android.os.SystemClock
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -10,8 +17,11 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -25,29 +35,40 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.DoneAll
+import androidx.compose.material.icons.filled.InsertEmoticon
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.AttachFile
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.ErrorOutline
+import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.Menu
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
@@ -64,9 +85,13 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -75,22 +100,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
-import androidx.compose.foundation.background
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items as gridItems
-import androidx.compose.material.icons.filled.InsertEmoticon
-import androidx.compose.material.icons.outlined.Description
-import androidx.compose.material.icons.outlined.Image
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import com.probusiness.intranet.data.remote.dto.ImagenDto
 import com.probusiness.intranet.data.remote.dto.MensajeDto
 import com.probusiness.intranet.data.remote.dto.SolicitudDto
@@ -98,10 +116,16 @@ import com.probusiness.intranet.ui.theme.Green600
 import com.probusiness.intranet.ui.theme.Orange600
 import com.probusiness.intranet.ui.theme.Sky500
 import com.probusiness.intranet.util.PendingAttachment
+import com.probusiness.intranet.util.VoiceRecorder
 import com.probusiness.intranet.util.extensionOf
+import com.probusiness.intranet.util.isAudioAttachment
 import com.probusiness.intranet.util.isInlineImage
 import com.probusiness.intranet.util.openAttachment
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import android.content.pm.PackageManager
+import kotlin.math.abs
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -145,6 +169,57 @@ fun TicketChatScreen(
     var showAttachMenu by remember { mutableStateOf(false) }
     var showEmojiSheet by remember { mutableStateOf(false) }
     var previewRequest by remember { mutableStateOf<ImagePreviewRequest?>(null) }
+    var isRecordingVoice by remember { mutableStateOf(false) }
+    var recordingElapsedMs by remember { mutableLongStateOf(0L) }
+    val voiceRecorder = remember { VoiceRecorder(context.applicationContext) }
+
+    val permissionMic = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        if (granted && voiceRecorder.start()) {
+            isRecordingVoice = true
+            recordingElapsedMs = 0L
+        }
+    }
+
+    fun startVoiceRecording() {
+        val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
+            PackageManager.PERMISSION_GRANTED
+        if (!granted) {
+            permissionMic.launch(Manifest.permission.RECORD_AUDIO)
+            return
+        }
+        if (voiceRecorder.start()) {
+            isRecordingVoice = true
+            recordingElapsedMs = 0L
+        }
+    }
+
+    fun finishVoiceRecording(send: Boolean) {
+        if (!isRecordingVoice && !voiceRecorder.isRecording) return
+        isRecordingVoice = false
+        if (!send) {
+            voiceRecorder.cancel()
+            return
+        }
+        val attachment = voiceRecorder.stop()
+        if (attachment != null) {
+            viewModel.enviarNotaVoz(attachment)
+        }
+    }
+
+    LaunchedEffect(isRecordingVoice) {
+        if (!isRecordingVoice) return@LaunchedEffect
+        val started = SystemClock.elapsedRealtime()
+        while (isActive && isRecordingVoice) {
+            recordingElapsedMs = SystemClock.elapsedRealtime() - started
+            delay(100)
+        }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose { voiceRecorder.cancel() }
+    }
 
     LaunchedEffect(uiState.scrollToMessageId, uiState.mensajes.size) {
         val targetId = uiState.scrollToMessageId ?: return@LaunchedEffect
@@ -241,65 +316,103 @@ fun TicketChatScreen(
                             .padding(10.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Box {
-                            IconButton(onClick = { showAttachMenu = true }) {
-                                Icon(Icons.Outlined.AttachFile, contentDescription = "Adjuntar")
+                        if (isRecordingVoice) {
+                            RecordingVoiceBar(
+                                elapsedMs = recordingElapsedMs,
+                                modifier = Modifier.weight(1f),
+                            )
+                        } else {
+                            Box {
+                                IconButton(onClick = { showAttachMenu = true }) {
+                                    Icon(Icons.Outlined.AttachFile, contentDescription = "Adjuntar")
+                                }
+                                DropdownMenu(expanded = showAttachMenu, onDismissRequest = { showAttachMenu = false }) {
+                                    DropdownMenuItem(
+                                        text = { Text("Imágenes") },
+                                        leadingIcon = { Icon(Icons.Outlined.Image, contentDescription = null) },
+                                        onClick = {
+                                            showAttachMenu = false
+                                            pickImages.launch("image/*")
+                                        },
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("Documento") },
+                                        leadingIcon = { Icon(Icons.Outlined.Description, contentDescription = null) },
+                                        onClick = {
+                                            showAttachMenu = false
+                                            pickFiles.launch(arrayOf("*/*"))
+                                        },
+                                    )
+                                }
                             }
-                            DropdownMenu(expanded = showAttachMenu, onDismissRequest = { showAttachMenu = false }) {
-                                DropdownMenuItem(
-                                    text = { Text("Imágenes") },
-                                    leadingIcon = { Icon(Icons.Outlined.Image, contentDescription = null) },
-                                    onClick = {
-                                        showAttachMenu = false
-                                        pickImages.launch("image/*")
-                                    },
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("Documento") },
-                                    leadingIcon = { Icon(Icons.Outlined.Description, contentDescription = null) },
-                                    onClick = {
-                                        showAttachMenu = false
-                                        pickFiles.launch(arrayOf("*/*"))
-                                    },
-                                )
+                            IconButton(onClick = { showEmojiSheet = true }) {
+                                Icon(Icons.Filled.InsertEmoticon, contentDescription = "Emoji")
                             }
+                            OutlinedTextField(
+                                value = uiState.texto,
+                                onValueChange = viewModel::onTextoChange,
+                                modifier = Modifier.weight(1f),
+                                placeholder = { Text("Escribe un mensaje...") },
+                                shape = RoundedCornerShape(20.dp),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = Orange600,
+                                    cursorColor = Orange600,
+                                ),
+                            )
                         }
-                        IconButton(onClick = { showEmojiSheet = true }) {
-                            Icon(Icons.Filled.InsertEmoticon, contentDescription = "Emoji")
-                        }
-                        OutlinedTextField(
-                            value = uiState.texto,
-                            onValueChange = viewModel::onTextoChange,
-                            modifier = Modifier.weight(1f),
-                            placeholder = { Text("Escribe un mensaje...") },
-                            shape = RoundedCornerShape(20.dp),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = Orange600,
-                                cursorColor = Orange600,
-                            ),
-                        )
                         Spacer(modifier = Modifier.size(6.dp))
+                        val canSendText = uiState.texto.isNotBlank() || uiState.adjuntos.isNotEmpty()
+                        val showMic = !canSendText && !uiState.isSending
                         Surface(
                             shape = CircleShape,
                             color = Orange600,
-                            modifier = Modifier.size(44.dp),
+                            modifier = Modifier
+                                .size(44.dp)
+                                .then(
+                                    if (showMic || isRecordingVoice) {
+                                        Modifier.pointerInput(isRecordingVoice) {
+                                            detectTapGestures(
+                                                onPress = {
+                                                    startVoiceRecording()
+                                                    val released = tryAwaitRelease()
+                                                    finishVoiceRecording(send = released)
+                                                },
+                                            )
+                                        }
+                                    } else {
+                                        Modifier
+                                    },
+                                ),
                         ) {
-                            IconButton(
-                                onClick = { viewModel.enviar(context) },
-                                enabled = !uiState.isSending,
-                            ) {
-                                if (uiState.isSending) {
-                                    CircularProgressIndicator(
-                                        modifier = Modifier.size(18.dp),
-                                        color = Color.White,
-                                        strokeWidth = 2.dp,
-                                    )
-                                } else {
+                            if (showMic || isRecordingVoice) {
+                                Box(
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentAlignment = Alignment.Center,
+                                ) {
                                     Icon(
-                                        Icons.Filled.Send,
-                                        contentDescription = "Enviar",
+                                        Icons.Filled.Mic,
+                                        contentDescription = "Grabar nota de voz",
                                         tint = Color.White,
                                     )
+                                }
+                            } else {
+                                IconButton(
+                                    onClick = { viewModel.enviar(context) },
+                                    enabled = !uiState.isSending,
+                                ) {
+                                    if (uiState.isSending) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(18.dp),
+                                            color = Color.White,
+                                            strokeWidth = 2.dp,
+                                        )
+                                    } else {
+                                        Icon(
+                                            Icons.Filled.Send,
+                                            contentDescription = "Enviar",
+                                            tint = Color.White,
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -576,7 +689,10 @@ private fun AdjuntosMensaje(
     onOpenDocument: (String, String) -> Unit,
 ) {
     val imagenes = adjuntos.filter { isInlineImage(it.nombre, null) && !it.url.isNullOrBlank() }
-    val documentos = adjuntos.filterNot { isInlineImage(it.nombre, null) }
+    val audios = adjuntos.filter { isAudioAttachment(it.nombre, null) && !it.url.isNullOrBlank() }
+    val documentos = adjuntos.filterNot {
+        isInlineImage(it.nombre, null) || isAudioAttachment(it.nombre, null)
+    }
     val imageUrls = imagenes.mapNotNull { it.url }
 
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -597,6 +713,10 @@ private fun AdjuntosMensaje(
                     }
                 }
             }
+        }
+        audios.forEach { audio ->
+            val url = audio.url ?: return@forEach
+            VoiceMessageBubble(url = url, nombre = audio.nombre)
         }
         documentos.forEach { doc ->
             val url = doc.url ?: return@forEach
@@ -1032,5 +1152,182 @@ private fun InfoRow(label: String, value: String) {
             text = value,
             style = MaterialTheme.typography.bodyMedium,
         )
+    }
+}
+
+@Composable
+private fun RecordingVoiceBar(
+    elapsedMs: Long,
+    modifier: Modifier = Modifier,
+) {
+    val infinite = rememberInfiniteTransition(label = "voice-bars")
+    val pulse by infinite.animateFloat(
+        initialValue = 0.35f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(450),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "pulse",
+    )
+    val seconds = (elapsedMs / 1000L).toInt()
+    val label = "%d:%02d".format(seconds / 60, seconds % 60)
+
+    Row(
+        modifier = modifier
+            .clip(RoundedCornerShape(20.dp))
+            .background(MaterialTheme.colorScheme.error.copy(alpha = 0.12f))
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(10.dp)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.error.copy(alpha = pulse)),
+        )
+        Row(
+            modifier = Modifier.weight(1f),
+            horizontalArrangement = Arrangement.spacedBy(2.dp),
+            verticalAlignment = Alignment.Bottom,
+        ) {
+            repeat(18) { index ->
+                val h = 8 + ((index * 7 + seconds * 3) % 18)
+                Box(
+                    modifier = Modifier
+                        .width(3.dp)
+                        .height((h * pulse).dp)
+                        .clip(RoundedCornerShape(2.dp))
+                        .background(MaterialTheme.colorScheme.error.copy(alpha = 0.75f)),
+                )
+            }
+        }
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.error,
+            fontWeight = FontWeight.SemiBold,
+        )
+    }
+}
+
+@Composable
+private fun VoiceMessageBubble(
+    url: String,
+    nombre: String?,
+) {
+    var playing by remember { mutableStateOf(false) }
+    var progress by remember { mutableFloatStateOf(0f) }
+    var durationMs by remember { mutableIntStateOf(0) }
+    var positionMs by remember { mutableIntStateOf(0) }
+    val player = remember(url) {
+        runCatching {
+            MediaPlayer().apply {
+                setDataSource(url)
+                setOnPreparedListener {
+                    durationMs = it.duration.coerceAtLeast(0)
+                }
+                setOnCompletionListener {
+                    playing = false
+                    progress = 1f
+                    positionMs = durationMs
+                }
+                prepareAsync()
+            }
+        }.getOrNull()
+    }
+
+    DisposableEffect(player) {
+        onDispose {
+            runCatching {
+                player?.stop()
+                player?.release()
+            }
+        }
+    }
+
+    LaunchedEffect(playing, player) {
+        while (isActive && playing && player != null) {
+            positionMs = player.currentPosition
+            val total = player.duration.coerceAtLeast(1)
+            progress = positionMs.toFloat() / total.toFloat()
+            delay(80)
+        }
+    }
+
+    val timeLabel = remember(positionMs, durationMs, playing) {
+        val ms = if (playing || positionMs > 0) positionMs else durationMs
+        val totalSec = (ms / 1000).coerceAtLeast(0)
+        "%d:%02d".format(totalSec / 60, totalSec % 60)
+    }
+
+    Surface(
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
+        modifier = Modifier.widthIn(min = 220.dp, max = 280.dp),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            IconButton(
+                onClick = {
+                    val p = player ?: return@IconButton
+                    if (playing) {
+                        p.pause()
+                        playing = false
+                    } else {
+                        runCatching {
+                            p.start()
+                            playing = true
+                        }
+                    }
+                },
+                modifier = Modifier.size(36.dp),
+            ) {
+                Icon(
+                    imageVector = if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                    contentDescription = if (playing) "Pausar" else "Reproducir",
+                    tint = Orange600,
+                )
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(18.dp),
+                    horizontalArrangement = Arrangement.spacedBy(2.dp),
+                    verticalAlignment = Alignment.Bottom,
+                ) {
+                    repeat(28) { index ->
+                        val seed = (nombre ?: url).hashCode()
+                        val h = 6 + abs((seed * 31 + index * 17) % 14)
+                        val played = (index + 1).toFloat() / 28f <= progress
+                        Box(
+                            modifier = Modifier
+                                .width(2.dp)
+                                .height(h.dp)
+                                .clip(RoundedCornerShape(1.dp))
+                                .background(
+                                    if (played) Orange600 else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.25f),
+                                ),
+                        )
+                    }
+                }
+                Text(
+                    text = timeLabel,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Icon(
+                Icons.Filled.Mic,
+                contentDescription = null,
+                tint = Orange600,
+                modifier = Modifier.size(18.dp),
+            )
+        }
     }
 }

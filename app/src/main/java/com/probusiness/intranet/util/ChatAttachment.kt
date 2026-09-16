@@ -7,6 +7,7 @@ import androidx.core.net.toUri
 import java.util.Locale
 
 private val INLINE_IMAGE_EXT = setOf("jpg", "jpeg", "png", "gif")
+private val AUDIO_EXT = setOf("mp3", "m4a", "aac", "ogg", "opus", "wav", "webm", "3gp", "oga", "caf")
 
 fun extensionOf(name: String?): String {
     val base = (name ?: "").substringBefore('?')
@@ -19,6 +20,12 @@ fun isInlineImage(name: String?, mime: String? = null): Boolean {
     if (ext == "webp") return false
     if (ext in INLINE_IMAGE_EXT) return true
     return mime?.startsWith("image/") == true
+}
+
+fun isAudioAttachment(name: String?, mime: String? = null): Boolean {
+    if (mime?.startsWith("audio/") == true) return true
+    val ext = extensionOf(name).lowercase(Locale.ROOT)
+    return ext in AUDIO_EXT
 }
 
 fun openAttachment(context: Context, url: String, mimeHint: String? = null) {
@@ -46,6 +53,12 @@ private fun guessMime(nameOrUrl: String): String {
         "jpg", "jpeg" -> "image/jpeg"
         "gif" -> "image/gif"
         "webp" -> "image/webp"
+        "mp3" -> "audio/mpeg"
+        "m4a", "aac" -> "audio/mp4"
+        "ogg", "opus", "oga" -> "audio/ogg"
+        "wav" -> "audio/wav"
+        "webm" -> "audio/webm"
+        "3gp" -> "audio/3gpp"
         else -> "*/*"
     }
 }
