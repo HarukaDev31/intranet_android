@@ -20,7 +20,6 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -100,7 +99,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -317,6 +315,13 @@ fun TicketChatScreen(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         if (isRecordingVoice) {
+                            IconButton(onClick = { finishVoiceRecording(send = false) }) {
+                                Icon(
+                                    Icons.Outlined.Close,
+                                    contentDescription = "Cancelar grabación",
+                                    tint = MaterialTheme.colorScheme.error,
+                                )
+                            }
                             RecordingVoiceBar(
                                 elapsedMs = recordingElapsedMs,
                                 modifier = Modifier.weight(1f),
@@ -362,56 +367,49 @@ fun TicketChatScreen(
                         }
                         Spacer(modifier = Modifier.size(6.dp))
                         val canSendText = uiState.texto.isNotBlank() || uiState.adjuntos.isNotEmpty()
-                        val showMic = !canSendText && !uiState.isSending
+                        val showMic = !canSendText && !uiState.isSending && !isRecordingVoice
                         Surface(
                             shape = CircleShape,
                             color = Orange600,
-                            modifier = Modifier
-                                .size(44.dp)
-                                .then(
-                                    if (showMic || isRecordingVoice) {
-                                        Modifier.pointerInput(isRecordingVoice) {
-                                            detectTapGestures(
-                                                onPress = {
-                                                    startVoiceRecording()
-                                                    val released = tryAwaitRelease()
-                                                    finishVoiceRecording(send = released)
-                                                },
-                                            )
-                                        }
-                                    } else {
-                                        Modifier
-                                    },
-                                ),
+                            modifier = Modifier.size(44.dp),
                         ) {
-                            if (showMic || isRecordingVoice) {
-                                Box(
-                                    modifier = Modifier.fillMaxSize(),
-                                    contentAlignment = Alignment.Center,
-                                ) {
-                                    Icon(
-                                        Icons.Filled.Mic,
-                                        contentDescription = "Grabar nota de voz",
-                                        tint = Color.White,
-                                    )
-                                }
-                            } else {
-                                IconButton(
-                                    onClick = { viewModel.enviar(context) },
-                                    enabled = !uiState.isSending,
-                                ) {
-                                    if (uiState.isSending) {
-                                        CircularProgressIndicator(
-                                            modifier = Modifier.size(18.dp),
-                                            color = Color.White,
-                                            strokeWidth = 2.dp,
-                                        )
-                                    } else {
+                            when {
+                                isRecordingVoice -> {
+                                    IconButton(onClick = { finishVoiceRecording(send = true) }) {
                                         Icon(
                                             Icons.Filled.Send,
-                                            contentDescription = "Enviar",
+                                            contentDescription = "Enviar audio",
                                             tint = Color.White,
                                         )
+                                    }
+                                }
+                                showMic -> {
+                                    IconButton(onClick = { startVoiceRecording() }) {
+                                        Icon(
+                                            Icons.Filled.Mic,
+                                            contentDescription = "Grabar nota de voz",
+                                            tint = Color.White,
+                                        )
+                                    }
+                                }
+                                else -> {
+                                    IconButton(
+                                        onClick = { viewModel.enviar(context) },
+                                        enabled = !uiState.isSending,
+                                    ) {
+                                        if (uiState.isSending) {
+                                            CircularProgressIndicator(
+                                                modifier = Modifier.size(18.dp),
+                                                color = Color.White,
+                                                strokeWidth = 2.dp,
+                                            )
+                                        } else {
+                                            Icon(
+                                                Icons.Filled.Send,
+                                                contentDescription = "Enviar",
+                                                tint = Color.White,
+                                            )
+                                        }
                                     }
                                 }
                             }
